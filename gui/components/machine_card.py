@@ -4,19 +4,36 @@ class MachineCard(ctk.CTkFrame):
     def __init__(self, master, machine_name, **kwargs):
         super().__init__(master, **kwargs)
         
-        # Konfiguracja siatki kafelka
-        self.grid_columnconfigure(0, weight=1) # Nazwa maszyny
-        self.grid_columnconfigure(1, weight=0) # Status
-        self.grid_columnconfigure(2, weight=0) # Przycisk Podgląd
-        self.grid_columnconfigure(3, weight=0) # Przycisk Drukuj
+        # Konfiguracja wag kolumn (dla wyśrodkowania kółka)
+        self.grid_columnconfigure(0, weight=1) # Badge z nazwą
+        self.grid_columnconfigure(1, weight=1) # Kółko statusu (teraz wyśrodkowane)
+        self.grid_columnconfigure(2, weight=0) # Przyciski
+        self.grid_columnconfigure(3, weight=0)
 
-        # 1. Nazwa maszyny i ew. ikona
-        self.label = ctk.CTkLabel(self, text=machine_name, font=("Arial", 14, "bold"))
-        self.label.grid(row=0, column=0, padx=20, pady=10, sticky="w")
+        # --- PUNKT 2: NOWOCZESNY BADGE DLA NAZWY MASZYNY ---
+        # Tworzymy ciemniejszą ramkę (tło dla nazwy)
+        # Używamy koloru zbliżonego do przycisku (niebieski), ale nieco ciemniejszego
+        self.name_badge = ctk.CTkFrame(self, fg_color="#1A1A1A", corner_radius=8)
+        self.name_badge.grid(row=0, column=0, padx=20, pady=10, sticky="w")
 
-        # 2. Status (kropka)
-        self.status_indicator = ctk.CTkLabel(self, text="●", text_color="gray", font=("Arial", 20))
-        self.status_indicator.grid(row=0, column=1, padx=10)
+        # Napis wewnątrz ramki
+        self.label = ctk.CTkLabel(
+            self.name_badge, 
+            text=machine_name, 
+            font=("Arial", 16, "bold"), 
+            text_color="#DCE4EE"
+        )
+        self.label.pack(padx=15, pady=5) # Odstępy wewnątrz ramki
+
+        # --- KÓŁKO STATUSU ---
+        self.status_indicator = ctk.CTkLabel(
+            self, 
+            text="●", 
+            text_color="gray", 
+            font=("Arial", 40)
+        )
+        # Rezygnujemy z sticky="w", żeby kropka mogła się wyśrodkować w swojej kolumnie
+        self.status_indicator.grid(row=0, column=1, padx=20, pady=10)
 
         # 3. Przycisk Podgląd
         self.btn_preview = ctk.CTkButton(self, text="Podgląd", width=100, fg_color="#3B3B3B")

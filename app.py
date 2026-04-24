@@ -5,14 +5,14 @@ class FoilApp(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        self.title("Foil Cut Reporter - Dział Cięcia")
+        self.title("Drukowanie raportów - FOIL CUT REPORTER")
         self.geometry("900x600")
 
         # --- Sidebar ---
         self.sidebar = ctk.CTkFrame(self, width=200, corner_radius=0)
         self.sidebar.pack(side="left", fill="y")
         
-        self.logo_label = ctk.CTkLabel(self.sidebar, text="FOIL CUT\nREPORTER", font=("Arial", 20, "bold"))
+        self.logo_label = ctk.CTkLabel(self.sidebar, text="Raporty dla folii\ndekoracyjnych", font=("Arial", 20, "bold"))
         self.logo_label.pack(pady=20, padx=20)
 
         self.btn_refresh = ctk.CTkButton(self.sidebar, text="Odśwież dane", command=self.refresh_machines)
