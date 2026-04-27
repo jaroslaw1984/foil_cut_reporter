@@ -1,9 +1,11 @@
 import customtkinter as ctk
 from gui.components.machine_card import MachineCard
+from database.db_manager import DBManager
 
 class FoilApp(ctk.CTk):
     def __init__(self):
         super().__init__()
+        self.db_manager = DBManager()
 
         self.title("Drukowanie raportów - FOIL CUT REPORTER")
         self.geometry("900x600")
@@ -27,8 +29,8 @@ class FoilApp(ctk.CTk):
     def refresh_machines(self):
         # Tutaj docelowo będzie fetch_available_machines() z SQL
         # Na razie zrobimy mock-up (sztuczne dane)
-        mock_machines = ["WLO-U001", "WLO-U002", "WLO-U003", "WLO-U005", "WLO-U008"]
-        
+        mock_machines = self.db_manager.fetch_available_machines()
+
         # Czyszczenie starych kafelków (opcjonalnie)
         for widget in self.scrollable_frame.winfo_children():
             widget.destroy()
