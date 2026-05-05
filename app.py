@@ -25,23 +25,38 @@ class FoilApp(ctk.CTk):
         self.scrollable_frame.pack(side="right", fill="both", expand=True, padx=20, pady=20)
 
         self.refresh_machines()
+        self.auto_refresh()
 
     def refresh_machines(self):
-        # Tutaj docelowo będzie fetch_available_machines() z SQL
-        # Na razie zrobimy mock-up (sztuczne dane)
-        mock_machines = self.db_manager.fetch_available_machines()
-
-        # Czyszczenie starych kafelków (opcjonalnie)
+        # 1. Pobieramy tylko te maszyny, które mają COŚ do pocięcia
+        # Docelowo użyjemy nowej metody: self.db.fetch_machines_with_active_reports()
+        active_machines = self.db_manager.fetch_active_machines()
+        
+        # Czyszczenie widoku
         for widget in self.scrollable_frame.winfo_children():
             widget.destroy()
 
-        for name in mock_machines:
+        if not active_machines:
+            # Jeśli nie ma zleceń, wyświetlamy duży, czytelny komunikat
+            self.no_orders_label = ctk.CTkLabel(
+                self.scrollable_frame, 
+                text="BRAK NOWYCH ZLECEŃ\nOdpocznij lub sprawdź SQL :)", 
+                font=("Arial", 20, "bold"),
+                text_color="gray"
+            )
+            self.no_orders_label.pack(pady=100)
+            return
+
+        # 2. Budujemy karty TYLKO dla aktywnych maszyn
+        for name in active_machines:
             card = MachineCard(self.scrollable_frame, machine_name=name)
             card.pack(fill="x", pady=5, padx=5)
+            card.update_status(has_data=True) # Zawsze zielona, bo tylko takie pokazujemy
             
-            # Test: Aktywujmy maszynę WLO-U001 jako przykład
-            if name == "WLO-U001":
-                card.update_status(has_data=True)
+    def auto_refresh(self):
+        self.refresh_machines()
+        # 30000 ms = 30 sekund
+        self.after(30000, self.auto_refresh)
 
 if __name__ == "__main__":
     app = FoilApp()

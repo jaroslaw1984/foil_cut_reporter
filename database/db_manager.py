@@ -2,12 +2,15 @@ import pandas as pd
 import pyodbc
 import urllib.parse
 from sqlalchemy import create_engine, text
-from config.paths import SERVER, DATABASE, VIEW_FULLNAME
+from config.paths import SERVER, DATABASE, SAP_SERVER, SAP_DATABASE
 
 class DBManager:
     def __init__(self):
-        # Tworzymy silnik raz przy starcie klasy
-        self.engine = self._get_hydra_engine()
+        # Silnik 1: Serwer Hydra (Sipdbprod)
+        self.hydra_engine = self._get_engine(SERVER, DATABASE)
+        
+        # Silnik 2: Serwer Kronos (Raporty)
+        self.raporty_engine = self._get_engine(SAP_SERVER, SAP_DATABASE)
     
     def _pick_driver(self) -> str:
         drivers = pyodbc.drivers()
@@ -16,35 +19,33 @@ class DBManager:
                 return name
         raise RuntimeError(f"No SQL Server ODBC driver found. Available: {drivers}")
     
-    def _get_hydra_engine(self):
+    def _get_engine(self, server, database):
+        """Uniwersalna metoda tworząca silnik SQLAlchemy dla podanego serwera i bazy."""
         driver = self._pick_driver()
         conn_str = (
             f"DRIVER={{{driver}}};"
-            f"SERVER={SERVER};"
-            f"DATABASE={DATABASE};"
+            f"SERVER={server};"
+            f"DATABASE={database};"
             "Trusted_Connection=yes;"
             "Encrypt=yes;"
             "TrustServerCertificate=yes;"
         )
-        
         quoted_conn_str = urllib.parse.quote_plus(conn_str)
-        # Tworzymy engine (SQLAlchemy zajmie się resztą)
         return create_engine(f"mssql+pyodbc:///?odbc_connect={quoted_conn_str}")
     
-    def fetch_available_machines(self):
-        sql = f"""
-            SELECT DISTINCT masch_nr
-            FROM {VIEW_FULLNAME}
-            WHERE masch_nr IS NOT NULL AND LTRIM(RTRIM(masch_nr)) <> ''
-            ORDER BY masch_nr
+    def fetch_active_machines(self):
+        """Pobiera tylko te maszyny, które mają aktywne zlecenia (status = 0) z nowej tabeli na Kronosie."""
+        sql = """
+            SELECT DISTINCT machine_name 
+            FROM tblPlanowanieFoilReportsQueue 
+            WHERE status = 0 
+            ORDER BY machine_name
         """
-
         try:
-            with self.engine.connect() as connection:
+            # Zapytanie kierujemy do bazy Raporty (raporty_engine)
+            with self.raporty_engine.connect() as connection:
                 df = pd.read_sql(text(sql), connection)
-            
-            # Twoja logika obróbki danych jest bardzo dobra
-            return df["masch_nr"].astype("string").str.strip().dropna().tolist()
+            return df["machine_name"].astype("string").str.strip().dropna().tolist()
         except Exception as e:
-            print(f"Błąd podczas pobierania maszyn: {e}")
-            return [] # Zwracamy pustą listę, by GUI mogło to obsłużyć
+            print(f"Błąd podczas odpytywania tblPlanowanieFoilReportsQueue: {e}")
+            return []
