@@ -34,15 +34,15 @@ class DBManager:
         return create_engine(f"mssql+pyodbc:///?odbc_connect={quoted_conn_str}")
     
     def fetch_active_machines(self):
-        """Pobiera tylko te maszyny, które mają aktywne zlecenia (status = 0) z nowej tabeli na Kronosie."""
+        """Pobiera tylko te maszyny, które mają aktywne zlecenia (status = 0)."""
+        # Dodane WITH (NOLOCK), aby uniknąć zawieszania aplikacji przy zablokowanej tabeli!
         sql = """
             SELECT DISTINCT machine_name 
-            FROM tblPlanowanieFoilReportsQueue 
+            FROM tblPlanowanieFoilReportsQueue WITH (NOLOCK)
             WHERE status = 0 
             ORDER BY machine_name
         """
         try:
-            # Zapytanie kierujemy do bazy Raporty (raporty_engine)
             with self.raporty_engine.connect() as connection:
                 df = pd.read_sql(text(sql), connection)
             return df["machine_name"].astype("string").str.strip().dropna().tolist()
