@@ -1,7 +1,11 @@
 import customtkinter as ctk
+import os
+import json
+from pathlib import Path
 from gui.components.machine_card import MachineCard
 from database.db_manager import DBManager
 from logic.report_engine import ReportEngine
+from config.paths import FOIL_REPORTS_PATH
 
 class FoilApp(ctk.CTk):
     def __init__(self):
@@ -72,44 +76,44 @@ class FoilApp(ctk.CTk):
     def print_machine_report(self, machine_name):
         print(f"--- Uruchamiam generowanie raportu dla maszyny: {machine_name} ---")
         
-        # 1. Inicjalizacja silnika (przekazujemy Twoje połączenie z bazą)
         engine = ReportEngine(self.db)
 
-        # 2. Na razie podajemy ścieżkę do pliku na sztywno do testów w konsoli
-        # Docelowo zrobimy tu pobieranie odpowiedniego pliku dla danej maszyny
-        excel_path = r"C:\Users\jsochacki\Documents\Przeliczanie maszyn\maszyna 1.xlsx"
+        # 1. Tworzymy bezpieczną ścieżkę do JSONa z zachowaniem tych samych zasad tworzenia pliku
+        safe_machine_name = str(machine_name).replace("/", "-").replace("\\", "-")
+        json_path = Path(FOIL_REPORTS_PATH) / f"{safe_machine_name}.json"
         
-        # 3. Wczytanie i weryfikacja
-        excel_data = engine.load_excel_data(excel_path)
-        if excel_data.empty:
-            print("Błąd: Brak danych w pliku lub plik nie istnieje.")
+        if not json_path.exists():
+            print(f"Błąd: Nie znaleziono pliku JSON -> {json_path}")
             return
-
-        # 4. Pobranie BOM z serwera Kronos
-        lista_zlecen = excel_data["Artykuł"].unique().tolist()
-        bom_data = engine.get_bom_details(lista_zlecen)
-
-        # 5. Agregacja
-        final_report = engine.aggregate_requirements(
-            excel_data, 
-            bom_data, 
-            matnr_col="Artykuł", 
-            meters_col="Docelowa wartość (P)"
-        )
+            
+        # 2. Ładujemy przygotowane już dane
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                payload = json.load(f)
+        except Exception as e:
+            print(f"Błąd odczytu pliku JSON: {e}")
+            return
+            
+        final_report = payload.get("data", {})
 
         # Sprawdzamy, czy jakakolwiek sekcja raportu zawiera dane
-        has_data = bool(final_report['outer_side'] or final_report['inner_side'] or final_report['protective'])
+        has_data = bool(final_report.get('outer_side') or final_report.get('inner_side') or final_report.get('protective'))
 
         if has_data:
             # Tworzymy ścieżkę do zapisu Worda (np. w tym samym folderze co skrypt)
-            word_output_path = f"Raport_Folie_{machine_name}.docx"
+            word_output_path = f"Raport_Folie_{safe_machine_name}.docx"
             
             # 6. Generowanie Worda!
             success = engine.generate_word_report(final_report, machine_name, word_output_path)
             
             if success:
-                import os
                 os.startfile(word_output_path)
+                
+                # 7. Odznaczamy maszynę w bazie danych jako wykonaną (status 1)
+                self.db.mark_report_done(machine_name)
+                
+                # 8. Odświeżamy widok GUI na maszynie produkcyjnej 
+                self.refresh_machines()
         else:
             print("Raport jest pusty po przeliczeniu.")
 

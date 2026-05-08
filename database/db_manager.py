@@ -49,3 +49,12 @@ class DBManager:
         except Exception as e:
             print(f"Błąd podczas odpytywania tblPlanowanieFoilReportsQueue: {e}")
             return []
+            
+    def mark_report_done(self, machine_name: str):
+        """Zmienia status w bazie na '1' (wydrukowany/zakończony)."""
+        sql = text("UPDATE tblPlanowanieFoilReportsQueue SET status = 1 WHERE machine_name = :m")
+        try:
+            with self.raporty_engine.begin() as connection:
+                connection.execute(sql, {"m": machine_name})
+        except Exception as e:
+            print(f"Błąd podczas zmiany statusu dla {machine_name}: {e}")
