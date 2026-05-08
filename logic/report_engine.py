@@ -102,23 +102,24 @@ class ReportEngine:
                 
                 elif posnr == '0030':
                     # Strona zewnętrzna (Dekor)
-                    self._add_to_sequential_list(report_data['outer_side'], idnrk, width, meters)
+                    self._add_to_sequential_list(report_data['outer_side'], idnrk, width, meters, matnr)
                 
                 elif posnr == '0020':
                     # Strona wewnętrzna (Dekor)
-                    self._add_to_sequential_list(report_data['inner_side'], idnrk, width, meters)
+                    self._add_to_sequential_list(report_data['inner_side'], idnrk, width, meters, matnr)
                         
         return report_data
 
-    def _add_to_sequential_list(self, target_list, idnrk, width, meters):
+    def _add_to_sequential_list(self, target_list, idnrk, width, meters, geometry):
         """Pomocnicza metoda do sumowania sekwencyjnego dekorów."""
-        if target_list and target_list[-1]['idnrk'] == idnrk:
+        if target_list and target_list[-1]['idnrk'] == idnrk and target_list[-1]['geometry'] == geometry:
             target_list[-1]['meters'] += meters
         else:
             target_list.append({
                 'idnrk': idnrk,
                 'width': width,
-                'meters': meters
+                'meters': meters,
+                'geometry': geometry
             })
 
     def generate_word_report(self, report_data: dict, machine_name: str, output_path: str):
@@ -161,8 +162,23 @@ class ReportEngine:
         if not data_list:
             doc.add_paragraph("Brak zleceń dla tej sekcji.")
         else:
-            for item in data_list:
-                p = doc.add_paragraph(style='List Bullet')
-                run = p.add_run(f"[{item['idnrk']}] Szerokość: {item['width']} mm")
-                run_m = p.add_run(f" — {int(item['meters'])} Metrów")
-                run_m.bold = True
+            # Generujemy tabelę Word z 5 kolumnami i widocznym obramowaniem
+            table = doc.add_table(rows=1, cols=5)
+            table.style = 'Table Grid'
+            
+            # Definiowanie nagłówków
+            hdr_cells = table.rows[0].cells
+            hdr_cells[0].text = 'Lp.'
+            hdr_cells[1].text = 'Geometria (Artykuł)'
+            hdr_cells[2].text = 'Indeks folii'
+            hdr_cells[3].text = 'Długość [mb]'
+            hdr_cells[4].text = 'Uwagi / Dodatkowe info'
+            
+            for idx, item in enumerate(data_list, start=1):
+                row_cells = table.add_row().cells
+                row_cells[0].text = str(idx)
+                row_cells[1].text = str(item['geometry'])
+                row_cells[2].text = str(item['idnrk'])
+                # Metry dodajemy osobnym "runem", żeby dało się je pogrubić
+                row_cells[3].paragraphs[0].add_run(str(int(item['meters']))).bold = True
+                row_cells[4].text = ''  # Puste miejsce do wypełnienia ręcznego

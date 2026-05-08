@@ -77,7 +77,7 @@ class FoilApp(ctk.CTk):
 
         # 2. Na razie podajemy ścieżkę do pliku na sztywno do testów w konsoli
         # Docelowo zrobimy tu pobieranie odpowiedniego pliku dla danej maszyny
-        excel_path = r"C:\Users\jsochacki\Documents\Przeliczanie maszyn\maszyna 5.xlsx"
+        excel_path = r"C:\Users\jsochacki\Documents\Przeliczanie maszyn\maszyna 1.xlsx"
         
         # 3. Wczytanie i weryfikacja
         excel_data = engine.load_excel_data(excel_path)
@@ -89,7 +89,7 @@ class FoilApp(ctk.CTk):
         lista_zlecen = excel_data["Artykuł"].unique().tolist()
         bom_data = engine.get_bom_details(lista_zlecen)
 
-        # 5. Agregacja (magia dzieje się tutaj)
+        # 5. Agregacja
         final_report = engine.aggregate_requirements(
             excel_data, 
             bom_data, 
