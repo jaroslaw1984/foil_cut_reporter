@@ -1,6 +1,7 @@
 import customtkinter as ctk
 import os
 import json
+from datetime import date
 from pathlib import Path
 from gui.components.machine_card import MachineCard
 from database.db_manager import DBManager
@@ -80,7 +81,8 @@ class FoilApp(ctk.CTk):
 
         # 1. Tworzymy bezpieczną ścieżkę do JSONa z zachowaniem tych samych zasad tworzenia pliku
         safe_machine_name = str(machine_name).replace("/", "-").replace("\\", "-")
-        json_path = Path(FOIL_REPORTS_PATH) / f"{safe_machine_name}.json"
+        today_str = date.today().strftime("%Y-%m-%d")
+        json_path = Path(FOIL_REPORTS_PATH) / f"{safe_machine_name}_{today_str}.json"
         
         if not json_path.exists():
             print(f"Błąd: Nie znaleziono pliku JSON -> {json_path}")
@@ -101,7 +103,7 @@ class FoilApp(ctk.CTk):
 
         if has_data:
             # Tworzymy ścieżkę do zapisu Worda (np. w tym samym folderze co skrypt)
-            word_output_path = f"Raport_Folie_{safe_machine_name}.docx"
+            word_output_path = f"Raport_Folie_{safe_machine_name}_{today_str}.docx"
             
             # 6. Generowanie Worda!
             success = engine.generate_word_report(final_report, machine_name, word_output_path)

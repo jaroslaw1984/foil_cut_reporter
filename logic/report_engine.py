@@ -129,16 +129,16 @@ class ReportEngine:
         header = doc.add_heading(f'RAPORT CIĘCIA FOLII - {machine_name}', 0)
         header.alignment = WD_ALIGN_PARAGRAPH.CENTER
         
-        # 1. DEKOR AUSSENSEITE
-        doc.add_heading('1. DEKOR AUSSENSEITE (STRONA ZEWNĘTRZNA - POSNR 0030)', level=1)
+        # 1. Folia dekoracyjna - STRONA ZEWNĘTRZNA
+        doc.add_heading('1. STRONA ZEWNĘTRZNA)', level=1)
         self._fill_decor_section(doc, report_data['outer_side'])
 
-        # 2. DEKOR INNENSEITE
-        doc.add_heading('2. DEKOR INNENSEITE (STRONA WEWNĘTRZNA - POSNR 0020)', level=1)
+        # 2. Folia dekoracyjna - STRONA WEWNĘTRZNA
+        doc.add_heading('2. STRONA WEWNĘTRZNA)', level=1)
         self._fill_decor_section(doc, report_data['inner_side'])
 
-        # 3. SCHUTZFOLIEN
-        doc.add_heading('3. SCHUTZFOLIEN (SUMA ZBIORCZA - POSNR 0050/0060)', level=1)
+        # 3. Folia ochronna - SUMA ZBIORCZA
+        doc.add_heading('3. Folia ochronna (SUMA ZBIORCZA)', level=1)
         if not report_data['protective']:
             doc.add_paragraph("Brak folii ochronnych.")
         else:
