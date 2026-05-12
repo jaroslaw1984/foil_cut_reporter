@@ -34,6 +34,9 @@ class FoilApp(ctk.CTk):
 
         self.btn_refresh = ctk.CTkButton(self.sidebar, text="Odśwież dane", command=self.refresh_machines)
         self.btn_refresh.pack(pady=10, padx=20)
+        
+        self.btn_history = ctk.CTkButton(self.sidebar, text="Historia raportów", command=self.open_history_folder, fg_color="#328354", hover_color="#2ecc71")
+        self.btn_history.pack(pady=10, padx=20)
 
         # --- Main Area ---
         self.scrollable_frame = ctk.CTkScrollableFrame(self, label_text="Lista Maszyn Produkcyjnych")
@@ -146,6 +149,19 @@ class FoilApp(ctk.CTk):
                         print(f"Usunięto stary raport z historii: {file_path.name}")
         except Exception as e:
             print(f"Błąd podczas czyszczenia folderu historii: {e}")
+            
+    def open_history_folder(self):
+        """Otwiera folder z historią raportów w Eksploratorze Windows."""
+        history_dir = Path(r"R:\Produkcja\Planowanie OKL\Production Counter Program\FoilReports\history")
+        
+        # Jeśli z jakiegoś powodu katalog jeszcze nie istnieje (np. świeża instalacja), program go najpierw utworzy
+        history_dir.mkdir(parents=True, exist_ok=True)
+        
+        try:
+            os.startfile(str(history_dir))
+            print(f"Otwarto folder historii: {history_dir}")
+        except Exception as e:
+            print(f"Błąd podczas otwierania folderu historii: {e}")        
 
     def delete_machine_report(self, machine_name):
         """Usuwa raport z bazy, czyści pamięć podręczną i trwale kasuje plik JSON."""
