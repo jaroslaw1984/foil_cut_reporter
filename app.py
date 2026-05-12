@@ -13,10 +13,13 @@ class FoilApp(ctk.CTk):
         super().__init__()
         self.db_manager = DBManager()
         self.db = self.db_manager  
+        
+        # Zbiór do śledzenia wydrukowanych maszyn
+        self.printed_machines = set()  
 
         self.title("Drukowanie raportów - FOIL CUT REPORTER")
         self.geometry("900x600")
-
+        
         # --- Sidebar ---
         self.sidebar = ctk.CTkFrame(self, width=200, corner_radius=0)
         self.sidebar.pack(side="left", fill="y")
@@ -36,11 +39,9 @@ class FoilApp(ctk.CTk):
 
     def refresh_machines(self):
         print("[DEBUG] 2. Próbuję połączyć się z bazą Kronos...")
-        # 1. Pobieramy tylko te maszyny, które mają COŚ do pocięcia
         active_machines = self.db_manager.fetch_active_machines()
         print(f"[DEBUG] 3. Sukces! Pobrane maszyny: {active_machines}")
-        # 1. Pobieramy tylko te maszyny, które mają COŚ do pocięcia
-        # Docelowo użyjemy nowej metody: self.db.fetch_machines_with_active_reports()
+        
         active_machines = self.db_manager.fetch_active_machines()
         
         # Czyszczenie widoku
@@ -48,7 +49,6 @@ class FoilApp(ctk.CTk):
             widget.destroy()
 
         if not active_machines:
-            # Jeśli nie ma zleceń, wyświetlamy duży, czytelny komunikat
             self.no_orders_label = ctk.CTkLabel(
                 self.scrollable_frame, 
                 text="BRAK NOWYCH ZLECEŃ\nOdpocznij lub sprawdź SQL :)", 
@@ -60,26 +60,27 @@ class FoilApp(ctk.CTk):
 
         # 2. Budujemy karty TYLKO dla aktywnych maszyn
         for name in active_machines:
-            # Przekazujemy command, który wywoła naszą nową metodę
             card = MachineCard(
                 self.scrollable_frame, 
-                machine_name=name,
-                print_command=lambda n=name: self.print_machine_report(n)
+                machine_name=name
             )
+            
+            # Przypisujemy komendy po utworzeniu karty. 
+            # Używamy sztuczki z lambda `n=name, c=card`, aby zamrozić wartości zmiennych w pętli.
+            card.btn_print.configure(command=lambda n=name, c=card: self.print_machine_report(n, c))
+            card.btn_delete.configure(command=lambda n=name: self.delete_machine_report(n))
+            
             card.pack(fill="x", pady=5, padx=5)
             card.update_status(has_data=True)
             
-    def auto_refresh(self):
-        self.refresh_machines()
-        # 30000 ms = 30 sekund
-        self.after(30000, self.auto_refresh)
-        
-    def print_machine_report(self, machine_name):
+            if name in self.printed_machines:
+                card.mark_as_printed()
+
+    def print_machine_report(self, machine_name, card):
         print(f"--- Uruchamiam generowanie raportu dla maszyny: {machine_name} ---")
         
         engine = ReportEngine(self.db)
 
-        # 1. Tworzymy bezpieczną ścieżkę do JSONa z zachowaniem tych samych zasad tworzenia pliku
         safe_machine_name = str(machine_name).replace("/", "-").replace("\\", "-")
         today_str = date.today().strftime("%Y-%m-%d")
         json_path = Path(FOIL_REPORTS_PATH) / f"{safe_machine_name}_{today_str}.json"
@@ -88,7 +89,6 @@ class FoilApp(ctk.CTk):
             print(f"Błąd: Nie znaleziono pliku JSON -> {json_path}")
             return
             
-        # 2. Ładujemy przygotowane już dane
         try:
             with open(json_path, "r", encoding="utf-8") as f:
                 payload = json.load(f)
@@ -98,28 +98,41 @@ class FoilApp(ctk.CTk):
             
         final_report = payload.get("data", {})
 
-        # Sprawdzamy, czy jakakolwiek sekcja raportu zawiera dane
         has_data = bool(final_report.get('outer_side') or final_report.get('inner_side') or final_report.get('protective'))
 
         if has_data:
-            # Tworzymy ścieżkę do zapisu Worda (np. w tym samym folderze co skrypt)
             word_output_path = f"Raport_Folie_{safe_machine_name}_{today_str}.docx"
-            
-            # 6. Generowanie Worda!
             success = engine.generate_word_report(final_report, machine_name, word_output_path)
             
             if success:
                 os.startfile(word_output_path)
                 
-                # 7. Odznaczamy maszynę w bazie danych jako wykonaną (status 1)
-                self.db.mark_report_done(machine_name)
-                
-                # 8. Odświeżamy widok GUI na maszynie produkcyjnej 
-                self.refresh_machines()
+                # --- Zapisujemy, że maszyna została wydrukowana ---
+                self.printed_machines.add(machine_name)
+                card.mark_as_printed()
         else:
             print("Raport jest pusty po przeliczeniu.")
 
         print("--- Zakończono ---")
+
+    def delete_machine_report(self, machine_name):
+        """Nowa metoda obsługująca przycisk 'Usuń'"""
+        print(f"--- Usuwanie raportu dla maszyny: {machine_name} ---")
+        
+        # Oznaczamy maszynę w bazie danych jako wykonaną (status 1)
+        self.db.mark_report_done(machine_name)
+        
+        # --- NOWOŚĆ: Usuwamy z pamięci podręcznej, bo raport znika z listy ---
+        if machine_name in self.printed_machines:
+            self.printed_machines.remove(machine_name)
+        
+        # Odświeżamy widok GUI - maszyna zniknie z listy
+        self.refresh_machines()
+        
+    def auto_refresh(self):
+        self.refresh_machines()
+        # 30000 ms = 30 sekund
+        self.after(30000, self.auto_refresh)    
         
 if __name__ == "__main__":
     print("[DEBUG] 1. Uruchamianie skryptu...")

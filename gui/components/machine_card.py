@@ -1,8 +1,7 @@
 import customtkinter as ctk
 
 class MachineCard(ctk.CTkFrame):
-    # 1. Dodajemy print_command jako jawny parametr
-    def __init__(self, master, machine_name, print_command=None, **kwargs):
+    def __init__(self, master, machine_name, **kwargs):
         super().__init__(master, **kwargs)
         
         # Konfiguracja wag kolumn (dla wyśrodkowania kółka)
@@ -33,26 +32,37 @@ class MachineCard(ctk.CTkFrame):
         )
         self.status_indicator.grid(row=0, column=1, padx=20, pady=10)
 
-        # Przycisk Podgląd
-        self.btn_preview = ctk.CTkButton(self, text="Podgląd", width=100, fg_color="#3B3B3B")
-        self.btn_preview.grid(row=0, column=2, padx=5, pady=10)
+        # przycisk Usuń
+        self.btn_delete = ctk.CTkButton(
+            self, 
+            text="Usuń", 
+            width=100, 
+            fg_color="#C0392B",    # Czerwony kolor
+            hover_color="#922B21"  # Ciemniejszy czerwony po najechaniu
+        )
+        self.btn_delete.grid(row=0, column=2, padx=5, pady=10)
 
-        # 2. Przycisk Drukuj (Domyślnie wyłączony, ale podpinamy komendę)
+        # Przycisk Drukuj (Domyślnie wyłączony)
         self.btn_print = ctk.CTkButton(
             self, 
             text="Drukuj", 
             width=100, 
             state="disabled", 
-            fg_color="gray",
-            command=print_command  # <-- TUTAJ PODPINAMY AKCJĘ!
+            fg_color="gray"
         )
         self.btn_print.grid(row=0, column=3, padx=10, pady=10)
 
     def update_status(self, has_data):
-        """Metoda do odblokowywania przycisku i zmiany koloru statusu"""
+        """Metoda do odblokowywania przycisków i zmiany koloru statusu na starcie"""
         if has_data:
             self.btn_print.configure(state="normal", fg_color="#1f538d")
-            self.status_indicator.configure(text_color="green")
+            self.btn_delete.configure(state="normal")
+            self.status_indicator.configure(text_color="orange") # Zmiana na pomarańczowy!
         else:
             self.btn_print.configure(state="disabled", fg_color="gray")
+            self.btn_delete.configure(state="disabled", fg_color="gray")
             self.status_indicator.configure(text_color="gray")
+
+    def mark_as_printed(self):
+        """Nowa metoda zmieniająca kolor na zielony po udanym wydruku"""
+        self.status_indicator.configure(text_color="green")

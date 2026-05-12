@@ -145,7 +145,7 @@ class ReportEngine:
             for symbol in sorted(report_data['protective'].keys()):
                 meters_sum = report_data['protective'][symbol]
                 p = doc.add_paragraph()
-                run = p.add_run(f"SUMA {symbol}:")
+                run = p.add_run(f"{symbol}:")
                 run.bold = True
                 run_m = p.add_run(f" {int(meters_sum)} mb")
                 run_m.bold = True
