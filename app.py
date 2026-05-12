@@ -1,6 +1,8 @@
 import customtkinter as ctk
 import os
 import json
+import shutil
+import time
 from datetime import date
 from pathlib import Path
 from gui.components.machine_card import MachineCard
@@ -16,6 +18,9 @@ class FoilApp(ctk.CTk):
         
         # Zbiór do śledzenia wydrukowanych maszyn
         self.printed_machines = set()  
+        
+        # Przy starcie aplikacji czyścimy folder historii, usuwając pliki starsze niż 10 dni
+        self.cleanup_history_folder()
 
         self.title("Drukowanie raportów - FOIL CUT REPORTER")
         self.geometry("900x600")
@@ -51,7 +56,7 @@ class FoilApp(ctk.CTk):
         if not active_machines:
             self.no_orders_label = ctk.CTkLabel(
                 self.scrollable_frame, 
-                text="BRAK NOWYCH ZLECEŃ\nOdpocznij lub sprawdź SQL :)", 
+                text="BRAK NOWYCH ZLECEŃ\nRAPORT POJAWI SIĘ AUTOMATYCZNIE", 
                 font=("Arial", 20, "bold"),
                 text_color="gray"
             )
@@ -85,6 +90,10 @@ class FoilApp(ctk.CTk):
         today_str = date.today().strftime("%Y-%m-%d")
         json_path = Path(FOIL_REPORTS_PATH) / f"{safe_machine_name}_{today_str}.json"
         
+        # --- LOKALIZACJA HISTORII ---
+        history_dir = Path(r"R:\Produkcja\Planowanie OKL\Production Counter Program\FoilReports\history")
+        history_dir.mkdir(parents=True, exist_ok=True) # Tworzy katalog, jeśli nie istnieje
+        
         if not json_path.exists():
             print(f"Błąd: Nie znaleziono pliku JSON -> {json_path}")
             return
@@ -97,17 +106,16 @@ class FoilApp(ctk.CTk):
             return
             
         final_report = payload.get("data", {})
-
         has_data = bool(final_report.get('outer_side') or final_report.get('inner_side') or final_report.get('protective'))
 
         if has_data:
-            word_output_path = f"Raport_Folie_{safe_machine_name}_{today_str}.docx"
-            success = engine.generate_word_report(final_report, machine_name, word_output_path)
+            # Drukujemy Worda OD RAZU do katalogu historii
+            word_output_path = history_dir / f"Raport_Folie_{safe_machine_name}_{today_str}.docx"
+            success = engine.generate_word_report(final_report, machine_name, str(word_output_path))
             
             if success:
-                os.startfile(word_output_path)
+                os.startfile(str(word_output_path))
                 
-                # --- Zapisujemy, że maszyna została wydrukowana ---
                 self.printed_machines.add(machine_name)
                 card.mark_as_printed()
         else:
@@ -115,18 +123,51 @@ class FoilApp(ctk.CTk):
 
         print("--- Zakończono ---")
 
+    def cleanup_history_folder(self):
+        """Usuwa raporty Word starsze niż 10 dni z folderu historii."""
+        history_dir = Path(r"R:\Produkcja\Planowanie OKL\Production Counter Program\FoilReports\history")
+        
+        # Jeśli katalog nie istnieje, nie mamy czego czyścić
+        if not history_dir.exists():
+            return
+            
+        print("--- Rozpoczynam czyszczenie starych raportów w historii ---")
+        now = time.time()
+        cutoff_seconds = 10 * 24 * 60 * 60  # 10 dni przeliczone na sekundy
+        
+        try:
+            # Szukamy tylko plików .docx
+            for file_path in history_dir.glob("*.docx"):
+                if file_path.is_file():
+                    # Obliczamy wiek pliku (obecny czas minus czas modyfikacji pliku)
+                    file_age = now - file_path.stat().st_mtime
+                    if file_age > cutoff_seconds:
+                        os.remove(file_path)
+                        print(f"Usunięto stary raport z historii: {file_path.name}")
+        except Exception as e:
+            print(f"Błąd podczas czyszczenia folderu historii: {e}")
+
     def delete_machine_report(self, machine_name):
-        """Nowa metoda obsługująca przycisk 'Usuń'"""
+        """Usuwa raport z bazy, czyści pamięć podręczną i trwale kasuje plik JSON."""
         print(f"--- Usuwanie raportu dla maszyny: {machine_name} ---")
         
-        # Oznaczamy maszynę w bazie danych jako wykonaną (status 1)
         self.db.mark_report_done(machine_name)
         
-        # --- NOWOŚĆ: Usuwamy z pamięci podręcznej, bo raport znika z listy ---
         if machine_name in self.printed_machines:
             self.printed_machines.remove(machine_name)
+            
+        # --- BEZPOWROTNE USUWANIE PLIKU JSON ---
+        safe_machine_name = str(machine_name).replace("/", "-").replace("\\", "-")
+        today_str = date.today().strftime("%Y-%m-%d")
+        json_path = Path(FOIL_REPORTS_PATH) / f"{safe_machine_name}_{today_str}.json"
         
-        # Odświeżamy widok GUI - maszyna zniknie z listy
+        if json_path.exists():
+            try:
+                os.remove(json_path) # Używamy zwykłego os.remove
+                print(f"Trwale usunięto plik JSON: {json_path.name}")
+            except Exception as e:
+                print(f"Błąd podczas usuwania pliku JSON: {e}")
+        
         self.refresh_machines()
         
     def auto_refresh(self):

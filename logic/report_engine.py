@@ -1,7 +1,7 @@
 import pandas as pd
 import os
 from docx import Document
-from docx.shared import RGBColor
+from docx.shared import RGBColor, Cm, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 class ReportEngine:
@@ -162,23 +162,43 @@ class ReportEngine:
         if not data_list:
             doc.add_paragraph("Brak zleceń dla tej sekcji.")
         else:
-            # Generujemy tabelę Word z 5 kolumnami i widocznym obramowaniem
+            # Generujemy tabelę Word z 5 kolumnami
             table = doc.add_table(rows=1, cols=5)
             table.style = 'Table Grid'
+            table.autofit = False # Wyłączamy auto-dopasowanie, by wymusić nasze proporcje
             
+            # Sztywne szerokości kolumn (razem ok. 17 cm, idealnie na stronę A4)
+            widths = (Cm(1.5), Cm(6.0), Cm(4.0), Cm(2.5), Cm(3.0))
+            
+            # Funkcja pomocnicza nadająca szerokość i PADDING (odstępy w komórce)
+            def style_row(row):
+                for idx, cell in enumerate(row.cells):
+                    cell.width = widths[idx]
+                    for p in cell.paragraphs:
+                        # Padding z góry i z dołu
+                        p.paragraph_format.space_before = Pt(4)
+                        p.paragraph_format.space_after = Pt(4)
+
             # Definiowanie nagłówków
             hdr_cells = table.rows[0].cells
             hdr_cells[0].text = 'Lp.'
             hdr_cells[1].text = 'Geometria (Artykuł)'
             hdr_cells[2].text = 'Indeks folii'
-            hdr_cells[3].text = 'Długość [mb]'
-            hdr_cells[4].text = 'Uwagi / Dodatkowe info'
+            hdr_cells[3].text = 'Dł. [mb]'
+            hdr_cells[4].text = 'Uwagi'
+            
+            # Aplikujemy styl dla nagłówka
+            style_row(table.rows[0])
             
             for idx, item in enumerate(data_list, start=1):
-                row_cells = table.add_row().cells
+                row = table.add_row()
+                row_cells = row.cells
                 row_cells[0].text = str(idx)
                 row_cells[1].text = str(item['geometry'])
                 row_cells[2].text = str(item['idnrk'])
                 # Metry dodajemy osobnym "runem", żeby dało się je pogrubić
                 row_cells[3].paragraphs[0].add_run(str(int(item['meters']))).bold = True
                 row_cells[4].text = ''  # Puste miejsce do wypełnienia ręcznego
+                
+                # Aplikujemy styl dla każdego wiersza z danymi
+                style_row(row)
