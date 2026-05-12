@@ -3,6 +3,8 @@ import os
 from docx import Document
 from docx.shared import RGBColor, Cm, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 
 class ReportEngine:
     def __init__(self, db_manager):
@@ -98,7 +100,7 @@ class ReportEngine:
                 # Klasyfikacja na podstawie POSNR
                 if posnr in ['0050', '0060']:
                     # Sumowanie zbiorcze wszystkich folii ochronnych
-                    report_data['protective'][idnrk] = report_data['protective'].get(idnrk, 0) + meters
+                    report_data['protective'][idnrk] = report_data['protective'].get(idnrk, 0.0) + meters
                 
                 elif posnr == '0030':
                     # Strona zewnętrzna (Dekor)
@@ -123,21 +125,23 @@ class ReportEngine:
             })
 
     def generate_word_report(self, report_data: dict, machine_name: str, output_path: str):
-        """Generuje raport z zachowaniem technicznego układu."""
+        """Generuje raport z zachowaniem technicznego układu i skompresowanym podsumowaniem dekorów."""
         doc = Document()
+        
+        # 1. Numeracja stron w stopce
+        self._add_page_numbering(doc)
         
         header = doc.add_heading(f'RAPORT CIĘCIA FOLII - {machine_name}', 0)
         header.alignment = WD_ALIGN_PARAGRAPH.CENTER
         
-        # 1. Folia dekoracyjna - STRONA ZEWNĘTRZNA
-        doc.add_heading('1. STRONA ZEWNĘTRZNA)', level=1)
+        # Sekcja 1 i 2 (Strony zewn./wewn. - szczegółowe)
+        doc.add_heading('1. STRONA ZEWNĘTRZNA', level=1)
         self._fill_decor_section(doc, report_data['outer_side'])
 
-        # 2. Folia dekoracyjna - STRONA WEWNĘTRZNA
-        doc.add_heading('2. STRONA WEWNĘTRZNA)', level=1)
+        doc.add_heading('2. STRONA WEWNĘTRZNA', level=1)
         self._fill_decor_section(doc, report_data['inner_side'])
 
-        # 3. Folia ochronna - SUMA ZBIORCZA
+        # 3. Folia ochronna - SUMA ZBIORCZA (Standardowa lista przed końcem sekcji głównej)
         doc.add_heading('3. Folia ochronna (SUMA ZBIORCZA)', level=1)
         if not report_data['protective']:
             doc.add_paragraph("Brak folii ochronnych.")
@@ -147,58 +151,157 @@ class ReportEngine:
                 p = doc.add_paragraph()
                 run = p.add_run(f"{symbol}:")
                 run.bold = True
-                run_m = p.add_run(f" {int(meters_sum)} mb")
+                # Formatowanie do 1 miejsca po przecinku z polskim przecinkiem
+                val_str = f"{meters_sum:.1f}".replace('.', ',')
+                run_m = p.add_run(f" {val_str} mb")
                 run_m.bold = True
-                run_m.font.color.rgb = RGBColor(0xCC, 0x00, 0x00)
+                run_m.font.color.rgb = RGBColor(0xCC, 0x00, 0x00) # Czerwony dla ochrony
+
+        # --- SEKCJA PODSUMOWANIA DEKORÓW NA NOWEJ STRONIE (Dwukolumnowa) ---
+        doc.add_page_break()
+        doc.add_heading('4. Folia dekoracyjna (SUMA ZBIORCZA)', level=1)
+        
+        # Agregacja danych ze wszystkich stron
+        decor_summary = {}
+        for side in ['outer_side', 'inner_side']:
+            for item in report_data.get(side, []):
+                idnrk = item['idnrk']
+                decor_summary[idnrk] = decor_summary.get(idnrk, 0.0) + item['meters']
+                
+        if not decor_summary:
+            doc.add_paragraph("Brak folii dekoracyjnych.")
+        else:
+            # Sortujemy indeksy i obliczamy punkt podziału listy na pół
+            sorted_keys = sorted(decor_summary.keys())
+            num_items = len(sorted_keys)
+            mid = (num_items + 1) // 2 
+            
+            # Tworzymy tabelę pomocniczą (2 kolumny)
+            summary_table = doc.add_table(rows=1, cols=2)
+            summary_table.autofit = False
+            summary_table.columns[0].width = Cm(8.5)
+            summary_table.columns[1].width = Cm(8.5)
+            
+            # Lewa kolumna (pierwsza połowa listy)
+            cell_left = summary_table.rows[0].cells[0]
+            for i in range(mid):
+                symbol = sorted_keys[i]
+                meters_sum = decor_summary[symbol]
+                p = cell_left.add_paragraph(style='List Bullet')
+                p.paragraph_format.space_after = Pt(0)
+                run = p.add_run(f"{symbol}:")
+                run.bold = True
+                # Formatowanie
+                val_str = f"{meters_sum:.1f}".replace('.', ',')
+                run_m = p.add_run(f" {val_str} mb")
+                run_m.bold = True
+                run_m.font.color.rgb = RGBColor(0x00, 0x66, 0xCC) # Niebieski dla dekorów
+                
+            # Prawa kolumna (druga połowa listy)
+            cell_right = summary_table.rows[0].cells[1]
+            for i in range(mid, num_items):
+                symbol = sorted_keys[i]
+                meters_sum = decor_summary[symbol]
+                p = cell_right.add_paragraph(style='List Bullet')
+                p.paragraph_format.space_after = Pt(0)
+                run = p.add_run(f"{symbol}:")
+                run.bold = True
+                # Formatowanie
+                val_str = f"{meters_sum:.1f}".replace('.', ',')
+                run_m = p.add_run(f" {val_str} mb")
+                run_m.bold = True
+                run_m.font.color.rgb = RGBColor(0x00, 0x66, 0xCC)
 
         try:
             doc.save(output_path)
             return True
         except Exception as e:
-            print(f"Save error: {e}")
+            print(f"Błąd zapisu: {e}")
             return False
+
+    def _add_page_numbering(self, doc):
+        """Dodaje numerację stron 'Strona X z Y' w stopce dokumentu."""
+        footer = doc.sections[0].footer
+        p = footer.paragraphs[0]
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        
+        run = p.add_run("Strona ")
+        self._append_page_number_field(run, "PAGE")
+        run = p.add_run(" z ")
+        self._append_page_number_field(run, "NUMPAGES")
+
+    def _append_page_number_field(self, run, field_name):
+        """Pomocnicza metoda do wstawiania pól dynamicznych XML (Strona/Suma stron)."""
+        fldChar1 = OxmlElement('w:fldChar')
+        fldChar1.set(qn('w:fldCharType'), 'begin')
+        
+        instrText = OxmlElement('w:instrText')
+        instrText.set(qn('xml:space'), 'preserve')
+        instrText.text = field_name
+        
+        fldChar2 = OxmlElement('w:fldChar')
+        fldChar2.set(qn('w:fldCharType'), 'end')
+        
+        run._r.append(fldChar1)
+        run._r.append(instrText)
+        run._r.append(fldChar2)
 
     def _fill_decor_section(self, doc, data_list):
         if not data_list:
             doc.add_paragraph("Brak zleceń dla tej sekcji.")
-        else:
-            # Generujemy tabelę Word z 5 kolumnami
-            table = doc.add_table(rows=1, cols=5)
-            table.style = 'Table Grid'
-            table.autofit = False # Wyłączamy auto-dopasowanie, by wymusić nasze proporcje
-            
-            # Sztywne szerokości kolumn (razem ok. 17 cm, idealnie na stronę A4)
-            widths = (Cm(1.5), Cm(6.0), Cm(4.0), Cm(2.5), Cm(3.0))
-            
-            # Funkcja pomocnicza nadająca szerokość i PADDING (odstępy w komórce)
-            def style_row(row):
-                for idx, cell in enumerate(row.cells):
-                    cell.width = widths[idx]
-                    for p in cell.paragraphs:
-                        # Padding z góry i z dołu
-                        p.paragraph_format.space_before = Pt(4)
-                        p.paragraph_format.space_after = Pt(4)
+            return
 
-            # Definiowanie nagłówków
-            hdr_cells = table.rows[0].cells
-            hdr_cells[0].text = 'Lp.'
-            hdr_cells[1].text = 'Geometria (Artykuł)'
-            hdr_cells[2].text = 'Indeks folii'
-            hdr_cells[3].text = 'Dł. [mb]'
-            hdr_cells[4].text = 'Uwagi'
-            
-            # Aplikujemy styl dla nagłówka
-            style_row(table.rows[0])
-            
-            for idx, item in enumerate(data_list, start=1):
+        current_base_geometry = None
+        table = None
+        
+        # Szerokości kolumn (razem ok. 17 cm, idealnie na A4)
+        widths = (Cm(1.5), Cm(6.0), Cm(4.0), Cm(2.5), Cm(3.0))
+        
+        def style_row(row):
+            for i, cell in enumerate(row.cells):
+                cell.width = widths[i]
+                for p in cell.paragraphs:
+                    p.paragraph_format.space_before = Pt(4)
+                    p.paragraph_format.space_after = Pt(4)
+
+        for idx, item in enumerate(data_list, start=1):
+            # 1. ROZWIĄZANIE LOGICZNE: Odcinamy kolor od bazy profilu.
+            full_article = str(item['geometry'])
+            base_geometry = full_article.split('-')[0]
+
+            # 2. ROZWIĄZANIE WIZUALNE: Kiedy zmienia się baza profilu, wstawiamy nagłówek i nową tabelę
+            if base_geometry != current_base_geometry:
+                current_base_geometry = base_geometry
+                
+                # Dodajemy prawdziwy nagłówek (Heading 2) poza tabelą
+                doc.add_heading(f"Geometria: {base_geometry}", level=2)
+                
+                # Tworzymy nową, niezależną tabelę dla tej geometrii
+                table = doc.add_table(rows=1, cols=5)
+                table.style = 'Table Grid'
+                table.autofit = False
+                
+                hdr_cells = table.rows[0].cells
+                hdr_cells[0].text = 'Lp.'
+                hdr_cells[1].text = 'Artykuł'
+                hdr_cells[2].text = 'Indeks folii'
+                hdr_cells[3].text = 'Dł. [mb]'
+                hdr_cells[4].text = 'Uwagi'
+                
+                style_row(table.rows[0])
+
+            # 3. Dodajemy wiersze ze wszystkimi wariantami folii do aktualnej tabeli
+            if table is not None:
                 row = table.add_row()
                 row_cells = row.cells
                 row_cells[0].text = str(idx)
-                row_cells[1].text = str(item['geometry'])
+                row_cells[1].text = full_article      # Wyświetlamy cały artykuł z kolorem
                 row_cells[2].text = str(item['idnrk'])
-                # Metry dodajemy osobnym "runem", żeby dało się je pogrubić
-                row_cells[3].paragraphs[0].add_run(str(int(item['meters']))).bold = True
-                row_cells[4].text = ''  # Puste miejsce do wypełnienia ręcznego
                 
-                # Aplikujemy styl dla każdego wiersza z danymi
+                # Formatowanie do 1 miejsca po przecinku z polskim przecinkiem
+                val_str = f"{item['meters']:.1f}".replace('.', ',')
+                row_cells[3].paragraphs[0].add_run(val_str).bold = True
+                
+                row_cells[4].text = ''
+                
                 style_row(row)
