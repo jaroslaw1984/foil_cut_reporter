@@ -10,6 +10,7 @@ class ReportEngine:
     def __init__(self, db_manager):
         self.db = db_manager
 
+    # --- POMOCNICZA METODA DO WSKAZANIA ODPowiedniego STEROWNIKA ODBC ---
     def load_excel_data(self, file_path: str) -> pd.DataFrame:
         """Wczytuje plik z Hydry (.csv lub .xlsx), automatycznie dopasowując ustawienia."""
         _, ext = os.path.splitext(file_path.lower())
@@ -41,6 +42,7 @@ class ReportEngine:
             df = df.dropna(subset=['Artykuł'])
         return df
 
+    # --- POMOCNICZA METODA DO OBLICZANIA POZOSTAŁYCH ILOŚCI (PCS) ---
     def get_bom_details(self, matnr_list: list) -> pd.DataFrame:
         """Pobiera BOM z Kronosa. Rozszerzono filtry, aby łapać wszystkie typy folii."""
         if not matnr_list:
@@ -65,6 +67,7 @@ class ReportEngine:
             print(f"SQL Error (Kronos): {e}")
             return pd.DataFrame()
 
+    # --- POMOCNICZA METODA DO SPRAWDZENIA, CZY MASZYNA JEST OBUSTRONNA ---
     def _extract_width_and_type(self, idnrk: str):
         """Dynamicznie wyciąga typ i szerokość z IDNRK."""
         idnrk = str(idnrk).strip()
@@ -78,6 +81,7 @@ class ReportEngine:
             
         return foil_prefix, width
 
+    # --- GŁÓWNA METODA AGREGUJĄCA DANE W OPARCIU O POSNR ---
     def aggregate_requirements(self, excel_df: pd.DataFrame, bom_df: pd.DataFrame, matnr_col="Artykuł", meters_col="Docelowa wartość (P)") -> dict:
         """Agreguje dane w oparciu o POSNR."""
         report_data = {
@@ -112,6 +116,7 @@ class ReportEngine:
                         
         return report_data
 
+    # --- POMOCNICZA METODA DO SUMOWANIA SEKWENCYJNEGO DEKORÓW ---
     def _add_to_sequential_list(self, target_list, idnrk, width, meters, geometry):
         """Pomocnicza metoda do sumowania sekwencyjnego dekorów."""
         if target_list and target_list[-1]['idnrk'] == idnrk and target_list[-1]['geometry'] == geometry:
@@ -124,6 +129,7 @@ class ReportEngine:
                 'geometry': geometry
             })
 
+    # --- POMOCNICZA METODA DO USTAWIANIA STATUSU RAPORTU W KOLEJCE ---
     def generate_word_report(self, report_data: dict, machine_name: str, output_path: str):
         """Generuje raport z zachowaniem technicznego układu. Obsługuje kombajny i maszyny standardowe."""
         doc = Document()
@@ -134,7 +140,7 @@ class ReportEngine:
         header = doc.add_heading(f'RAPORT CIĘCIA FOLII - {machine_name}', 0)
         header.alignment = WD_ALIGN_PARAGRAPH.CENTER
         
-        # Bezpieczne wyciągnięcie danych (na wypadek gdyby przekazano cały JSON zamiast węzła 'data')
+        # Bezpieczne wyciągnięcie danych
         data_dict = report_data.get("data", report_data)
         
         # --- KLUCZOWA ZMIANA: Sprawdzamy, czy mamy dane dla kombajnu ---
@@ -152,27 +158,53 @@ class ReportEngine:
             doc.add_heading('2. STRONA WEWNĘTRZNA', level=1)
             self._fill_decor_section(doc, data_dict.get('inner_side', []))
 
+        # 4 kolumny: Lp(1.5cm), Indeks(6.5cm), Metry(3.5cm), Uwagi(5.5cm) = Razem 17cm (idealnie na A4)
+        summary_widths = (Cm(1.5), Cm(6.5), Cm(3.5), Cm(5.5))
+        def style_summary_row(row):
+            for i, cell in enumerate(row.cells):
+                cell.width = summary_widths[i]
+                for p in cell.paragraphs:
+                    p.paragraph_format.space_before = Pt(4)
+                    p.paragraph_format.space_after = Pt(4)
+
         # 3. Folia ochronna - SUMA ZBIORCZA
+        doc.add_page_break() # WYMUSZENIE NOWEJ STRONY
         doc.add_heading('3. Folia ochronna (SUMA ZBIORCZA)', level=1)
         protective = data_dict.get('protective', {})
+        
         if not protective:
             doc.add_paragraph("Brak folii ochronnych.")
         else:
-            for symbol in sorted(protective.keys()):
-                meters_sum = protective[symbol]
-                p = doc.add_paragraph()
-                run = p.add_run(f"{symbol}:")
-                run.bold = True
-                val_str = f"{meters_sum:.1f}".replace('.', ',')
-                run_m = p.add_run(f" {val_str} mb")
-                run_m.bold = True
-                run_m.font.color.rgb = RGBColor(0xCC, 0x00, 0x00)
+            # Tworzymy tabelę
+            prot_table = doc.add_table(rows=1, cols=4)
+            prot_table.style = 'Table Grid'
+            hdr_cells = prot_table.rows[0].cells
+            hdr_cells[0].text = 'Lp.'
+            hdr_cells[1].text = 'Indeks folii'
+            hdr_cells[2].text = 'Dł. [mb]'
+            hdr_cells[3].text = 'Uwagi'
+            style_summary_row(prot_table.rows[0])
 
-        # --- SEKCJA PODSUMOWANIA DEKORÓW NA NOWEJ STRONIE (Dwukolumnowa) ---
-        doc.add_page_break()
+            # Wypełniamy tabelę danymi
+            for idx, symbol in enumerate(sorted(protective.keys()), start=1):
+                meters_sum = protective[symbol]
+                row = prot_table.add_row()
+                row.cells[0].text = str(idx)
+                row.cells[1].text = symbol
+                
+                val_str = f"{meters_sum:.1f}".replace('.', ',')
+                run_m = row.cells[2].paragraphs[0].add_run(val_str)
+                run_m.bold = True
+                run_m.font.color.rgb = RGBColor(0xCC, 0x00, 0x00) # Czerwony kolor dla folii ochronnej
+                
+                row.cells[3].text = '' # Puste miejsce na uwagi
+                style_summary_row(row)
+
+        # 4. Folia dekoracyjna (SUMA ZBIORCZA)
+        doc.add_page_break() # WYMUSZENIE NOWEJ STRONY
         doc.add_heading('4. Folia dekoracyjna (SUMA ZBIORCZA)', level=1)
         
-        # Agregacja danych ze wszystkich stron (działa i dla kombajnu, i dla standardu!)
+        # Agregacja danych dekorów
         decor_summary = {}
         for side in ['outer_side', 'inner_side', 'combined_side']:
             for item in data_dict.get(side, []):
@@ -182,44 +214,30 @@ class ReportEngine:
         if not decor_summary:
             doc.add_paragraph("Brak folii dekoracyjnych.")
         else:
-            # Sortujemy indeksy i obliczamy punkt podziału listy na pół
-            sorted_keys = sorted(decor_summary.keys())
-            num_items = len(sorted_keys)
-            mid = (num_items + 1) // 2 
-            
-            # Tworzymy tabelę pomocniczą (2 kolumny)
-            summary_table = doc.add_table(rows=1, cols=2)
-            summary_table.autofit = False
-            summary_table.columns[0].width = Cm(8.5)
-            summary_table.columns[1].width = Cm(8.5)
-            
-            # Lewa kolumna
-            cell_left = summary_table.rows[0].cells[0]
-            for i in range(mid):
-                symbol = sorted_keys[i]
+            # Tworzymy tabelę
+            decor_table = doc.add_table(rows=1, cols=4)
+            decor_table.style = 'Table Grid'
+            hdr_cells = decor_table.rows[0].cells
+            hdr_cells[0].text = 'Lp.'
+            hdr_cells[1].text = 'Indeks folii'
+            hdr_cells[2].text = 'Dł. [mb]'
+            hdr_cells[3].text = 'Uwagi'
+            style_summary_row(decor_table.rows[0])
+
+            # Wypełniamy tabelę danymi
+            for idx, symbol in enumerate(sorted(decor_summary.keys()), start=1):
                 meters_sum = decor_summary[symbol]
-                p = cell_left.add_paragraph(style='List Bullet')
-                p.paragraph_format.space_after = Pt(0)
-                run = p.add_run(f"{symbol}:")
-                run.bold = True
-                val_str = f"{meters_sum:.1f}".replace('.', ',')
-                run_m = p.add_run(f" {val_str} mb")
-                run_m.bold = True
-                run_m.font.color.rgb = RGBColor(0x00, 0x66, 0xCC)
+                row = decor_table.add_row()
+                row.cells[0].text = str(idx)
+                row.cells[1].text = symbol
                 
-            # Prawa kolumna
-            cell_right = summary_table.rows[0].cells[1]
-            for i in range(mid, num_items):
-                symbol = sorted_keys[i]
-                meters_sum = decor_summary[symbol]
-                p = cell_right.add_paragraph(style='List Bullet')
-                p.paragraph_format.space_after = Pt(0)
-                run = p.add_run(f"{symbol}:")
-                run.bold = True
                 val_str = f"{meters_sum:.1f}".replace('.', ',')
-                run_m = p.add_run(f" {val_str} mb")
+                run_m = row.cells[2].paragraphs[0].add_run(val_str)
                 run_m.bold = True
-                run_m.font.color.rgb = RGBColor(0x00, 0x66, 0xCC)
+                run_m.font.color.rgb = RGBColor(0x00, 0x66, 0xCC) # Niebieski kolor dla dekorów
+                
+                row.cells[3].text = '' # Puste miejsce na uwagi
+                style_summary_row(row)
 
         try:
             doc.save(output_path)
@@ -228,6 +246,7 @@ class ReportEngine:
             print(f"Błąd zapisu: {e}")
             return False
 
+    # --- POMOCNICZA METODA DO DODAWANIA NUMERACJI STRON W STOPCE ---
     def _add_page_numbering(self, doc):
         """Dodaje numerację stron 'Strona X z Y' w stopce dokumentu."""
         footer = doc.sections[0].footer
@@ -239,6 +258,7 @@ class ReportEngine:
         run = p.add_run(" z ")
         self._append_page_number_field(run, "NUMPAGES")
 
+    # --- POMOCNICZA METODA DO DODAWANIA DYNAMICZNYCH PÓL NUMERACJI STRON ---
     def _append_page_number_field(self, run, field_name):
         """Pomocnicza metoda do wstawiania pól dynamicznych XML (Strona/Suma stron)."""
         fldChar1 = OxmlElement('w:fldChar')
@@ -255,6 +275,7 @@ class ReportEngine:
         run._r.append(instrText)
         run._r.append(fldChar2)
 
+    # --- POMOCNICZA METODA DO WYPEŁNIANIA SEKCJI DEKORACYJNEJ ---
     def _fill_decor_section(self, doc, data_list):
         if not data_list:
             doc.add_paragraph("Brak zleceń dla tej sekcji.")
@@ -266,6 +287,7 @@ class ReportEngine:
         # Szerokości kolumn (razem ok. 17 cm, idealnie na A4)
         widths = (Cm(1.5), Cm(6.0), Cm(4.0), Cm(2.5), Cm(3.0))
         
+        # --- POMOCNICZA FUNKCJA DO STYLOWANIA WIERSZY TABELI DEKORACYJNEJ ---
         def style_row(row):
             for i, cell in enumerate(row.cells):
                 cell.width = widths[i]
