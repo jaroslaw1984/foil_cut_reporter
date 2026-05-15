@@ -125,7 +125,7 @@ class ReportEngine:
             })
 
     def generate_word_report(self, report_data: dict, machine_name: str, output_path: str):
-        """Generuje raport z zachowaniem technicznego układu i skompresowanym podsumowaniem dekorów."""
+        """Generuje raport z zachowaniem technicznego układu. Obsługuje kombajny i maszyny standardowe."""
         doc = Document()
         
         # 1. Numeracja stron w stopce
@@ -134,37 +134,48 @@ class ReportEngine:
         header = doc.add_heading(f'RAPORT CIĘCIA FOLII - {machine_name}', 0)
         header.alignment = WD_ALIGN_PARAGRAPH.CENTER
         
-        # Sekcja 1 i 2 (Strony zewn./wewn. - szczegółowe)
-        doc.add_heading('1. STRONA ZEWNĘTRZNA', level=1)
-        self._fill_decor_section(doc, report_data['outer_side'])
+        # Bezpieczne wyciągnięcie danych (na wypadek gdyby przekazano cały JSON zamiast węzła 'data')
+        data_dict = report_data.get("data", report_data)
+        
+        # --- KLUCZOWA ZMIANA: Sprawdzamy, czy mamy dane dla kombajnu ---
+        combined = data_dict.get('combined_side', [])
+        
+        if combined:
+            # === TRYB KOMBAJNU ===
+            doc.add_heading('1. STRONA ZEWNĘTRZNA I WEWNĘTRZNA (KOMBAJN)', level=1)
+            self._fill_decor_section(doc, combined)
+        else:
+            # === TRYB STANDARDOWY ===
+            doc.add_heading('1. STRONA ZEWNĘTRZNA', level=1)
+            self._fill_decor_section(doc, data_dict.get('outer_side', []))
 
-        doc.add_heading('2. STRONA WEWNĘTRZNA', level=1)
-        self._fill_decor_section(doc, report_data['inner_side'])
+            doc.add_heading('2. STRONA WEWNĘTRZNA', level=1)
+            self._fill_decor_section(doc, data_dict.get('inner_side', []))
 
-        # 3. Folia ochronna - SUMA ZBIORCZA (Standardowa lista przed końcem sekcji głównej)
+        # 3. Folia ochronna - SUMA ZBIORCZA
         doc.add_heading('3. Folia ochronna (SUMA ZBIORCZA)', level=1)
-        if not report_data['protective']:
+        protective = data_dict.get('protective', {})
+        if not protective:
             doc.add_paragraph("Brak folii ochronnych.")
         else:
-            for symbol in sorted(report_data['protective'].keys()):
-                meters_sum = report_data['protective'][symbol]
+            for symbol in sorted(protective.keys()):
+                meters_sum = protective[symbol]
                 p = doc.add_paragraph()
                 run = p.add_run(f"{symbol}:")
                 run.bold = True
-                # Formatowanie do 1 miejsca po przecinku z polskim przecinkiem
                 val_str = f"{meters_sum:.1f}".replace('.', ',')
                 run_m = p.add_run(f" {val_str} mb")
                 run_m.bold = True
-                run_m.font.color.rgb = RGBColor(0xCC, 0x00, 0x00) # Czerwony dla ochrony
+                run_m.font.color.rgb = RGBColor(0xCC, 0x00, 0x00)
 
         # --- SEKCJA PODSUMOWANIA DEKORÓW NA NOWEJ STRONIE (Dwukolumnowa) ---
         doc.add_page_break()
         doc.add_heading('4. Folia dekoracyjna (SUMA ZBIORCZA)', level=1)
         
-        # Agregacja danych ze wszystkich stron
+        # Agregacja danych ze wszystkich stron (działa i dla kombajnu, i dla standardu!)
         decor_summary = {}
-        for side in ['outer_side', 'inner_side']:
-            for item in report_data.get(side, []):
+        for side in ['outer_side', 'inner_side', 'combined_side']:
+            for item in data_dict.get(side, []):
                 idnrk = item['idnrk']
                 decor_summary[idnrk] = decor_summary.get(idnrk, 0.0) + item['meters']
                 
@@ -182,7 +193,7 @@ class ReportEngine:
             summary_table.columns[0].width = Cm(8.5)
             summary_table.columns[1].width = Cm(8.5)
             
-            # Lewa kolumna (pierwsza połowa listy)
+            # Lewa kolumna
             cell_left = summary_table.rows[0].cells[0]
             for i in range(mid):
                 symbol = sorted_keys[i]
@@ -191,13 +202,12 @@ class ReportEngine:
                 p.paragraph_format.space_after = Pt(0)
                 run = p.add_run(f"{symbol}:")
                 run.bold = True
-                # Formatowanie
                 val_str = f"{meters_sum:.1f}".replace('.', ',')
                 run_m = p.add_run(f" {val_str} mb")
                 run_m.bold = True
-                run_m.font.color.rgb = RGBColor(0x00, 0x66, 0xCC) # Niebieski dla dekorów
+                run_m.font.color.rgb = RGBColor(0x00, 0x66, 0xCC)
                 
-            # Prawa kolumna (druga połowa listy)
+            # Prawa kolumna
             cell_right = summary_table.rows[0].cells[1]
             for i in range(mid, num_items):
                 symbol = sorted_keys[i]
@@ -206,7 +216,6 @@ class ReportEngine:
                 p.paragraph_format.space_after = Pt(0)
                 run = p.add_run(f"{symbol}:")
                 run.bold = True
-                # Formatowanie
                 val_str = f"{meters_sum:.1f}".replace('.', ',')
                 run_m = p.add_run(f" {val_str} mb")
                 run_m.bold = True
