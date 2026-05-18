@@ -109,7 +109,14 @@ class FoilApp(ctk.CTk):
             return
             
         final_report = payload.get("data", {})
-        has_data = bool(final_report.get('outer_side') or final_report.get('inner_side') or final_report.get('protective'))
+        has_data = bool(
+            final_report.get('outer_side') or 
+            final_report.get('inner_side') or 
+            final_report.get('protective') or 
+            final_report.get('production_sequence') or 
+            final_report.get('combined_side') or 
+            final_report.get('top_side')
+        )
 
         if has_data:
             # Drukujemy Worda OD RAZU do katalogu historii
