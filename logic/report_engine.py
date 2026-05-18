@@ -131,7 +131,7 @@ class ReportEngine:
 
     # --- POMOCNICZA METODA DO USTAWIANIA STATUSU RAPORTU W KOLEJCE ---
     def generate_word_report(self, report_data: dict, machine_name: str, output_path: str):
-        """Generuje raport z zachowaniem technicznego układu. Obsługuje kombajny i maszyny standardowe."""
+        """Generuje raport z zachowaniem technicznego układu. Obsługuje 3 strony (Zew, Wew, Górna)."""
         doc = Document()
         
         # 1. Numeracja stron w stopce
@@ -140,16 +140,15 @@ class ReportEngine:
         header = doc.add_heading(f'RAPORT CIĘCIA FOLII - {machine_name}', 0)
         header.alignment = WD_ALIGN_PARAGRAPH.CENTER
         
-        # Bezpieczne wyciągnięcie danych
         data_dict = report_data.get("data", report_data)
-        
-        # --- KLUCZOWA ZMIANA: Sprawdzamy, czy mamy dane dla kombajnu ---
         combined = data_dict.get('combined_side', [])
         
+        # --- ZMIANA: Dynamiczna numeracja sekcji w zależności od trybu ---
         if combined:
             # === TRYB KOMBAJNU ===
-            doc.add_heading('1. STRONA ZEWNĘTRZNA I WEWNĘTRZNA (KOMBAJN)', level=1)
+            doc.add_heading('1. STRONA ZEWNĘTRZNA, WEWNĘTRZNA I GÓRNA (KOMBAJN)', level=1)
             self._fill_decor_section(doc, combined)
+            next_num = 2  # Sumy zaczną się od 2
         else:
             # === TRYB STANDARDOWY ===
             doc.add_heading('1. STRONA ZEWNĘTRZNA', level=1)
@@ -158,7 +157,12 @@ class ReportEngine:
             doc.add_heading('2. STRONA WEWNĘTRZNA', level=1)
             self._fill_decor_section(doc, data_dict.get('inner_side', []))
 
-        # 4 kolumny: Lp(1.5cm), Indeks(6.5cm), Metry(3.5cm), Uwagi(5.5cm) = Razem 17cm (idealnie na A4)
+            # --- DODANO: Strona Górna (0023) ---
+            doc.add_heading('3. STRONA GÓRNA', level=1)
+            self._fill_decor_section(doc, data_dict.get('top_side', []))
+            
+            next_num = 4  # Sumy zaczną się od 4
+
         summary_widths = (Cm(1.5), Cm(6.5), Cm(3.5), Cm(5.5))
         def style_summary_row(row):
             for i, cell in enumerate(row.cells):
@@ -167,15 +171,14 @@ class ReportEngine:
                     p.paragraph_format.space_before = Pt(4)
                     p.paragraph_format.space_after = Pt(4)
 
-        # 3. Folia ochronna - SUMA ZBIORCZA
-        doc.add_page_break() # WYMUSZENIE NOWEJ STRONY
-        doc.add_heading('3. Folia ochronna (SUMA ZBIORCZA)', level=1)
+        # Sekcja folii ochronnej z dynamicznym numerem
+        doc.add_page_break()
+        doc.add_heading(f'{next_num}. Folia ochronna (SUMA ZBIORCZA)', level=1)
         protective = data_dict.get('protective', {})
         
         if not protective:
             doc.add_paragraph("Brak folii ochronnych.")
         else:
-            # Tworzymy tabelę
             prot_table = doc.add_table(rows=1, cols=4)
             prot_table.style = 'Table Grid'
             hdr_cells = prot_table.rows[0].cells
@@ -185,7 +188,6 @@ class ReportEngine:
             hdr_cells[3].text = 'Uwagi'
             style_summary_row(prot_table.rows[0])
 
-            # Wypełniamy tabelę danymi
             for idx, symbol in enumerate(sorted(protective.keys()), start=1):
                 meters_sum = protective[symbol]
                 row = prot_table.add_row()
@@ -195,18 +197,18 @@ class ReportEngine:
                 val_str = f"{meters_sum:.1f}".replace('.', ',')
                 run_m = row.cells[2].paragraphs[0].add_run(val_str)
                 run_m.bold = True
-                run_m.font.color.rgb = RGBColor(0xCC, 0x00, 0x00) # Czerwony kolor dla folii ochronnej
+                run_m.font.color.rgb = RGBColor(0xCC, 0x00, 0x00)
                 
-                row.cells[3].text = '' # Puste miejsce na uwagi
+                row.cells[3].text = '' 
                 style_summary_row(row)
 
-        # 4. Folia dekoracyjna (SUMA ZBIORCZA)
-        doc.add_page_break() # WYMUSZENIE NOWEJ STRONY
-        doc.add_heading('4. Folia dekoracyjna (SUMA ZBIORCZA)', level=1)
+        # Sekcja sumy dekorów z dynamicznym numerem
+        doc.add_page_break()
+        doc.add_heading(f'{next_num + 1}. Folia dekoracyjna (SUMA ZBIORCZA)', level=1)
         
-        # Agregacja danych dekorów
         decor_summary = {}
-        for side in ['outer_side', 'inner_side', 'combined_side']:
+        # --- ZMIANA: Zbieramy też metry z 'top_side' ---
+        for side in ['outer_side', 'inner_side', 'top_side', 'combined_side']:
             for item in data_dict.get(side, []):
                 idnrk = item['idnrk']
                 decor_summary[idnrk] = decor_summary.get(idnrk, 0.0) + item['meters']
@@ -214,7 +216,6 @@ class ReportEngine:
         if not decor_summary:
             doc.add_paragraph("Brak folii dekoracyjnych.")
         else:
-            # Tworzymy tabelę
             decor_table = doc.add_table(rows=1, cols=4)
             decor_table.style = 'Table Grid'
             hdr_cells = decor_table.rows[0].cells
@@ -224,7 +225,6 @@ class ReportEngine:
             hdr_cells[3].text = 'Uwagi'
             style_summary_row(decor_table.rows[0])
 
-            # Wypełniamy tabelę danymi
             for idx, symbol in enumerate(sorted(decor_summary.keys()), start=1):
                 meters_sum = decor_summary[symbol]
                 row = decor_table.add_row()
@@ -234,9 +234,9 @@ class ReportEngine:
                 val_str = f"{meters_sum:.1f}".replace('.', ',')
                 run_m = row.cells[2].paragraphs[0].add_run(val_str)
                 run_m.bold = True
-                run_m.font.color.rgb = RGBColor(0x00, 0x66, 0xCC) # Niebieski kolor dla dekorów
+                run_m.font.color.rgb = RGBColor(0x00, 0x66, 0xCC)
                 
-                row.cells[3].text = '' # Puste miejsce na uwagi
+                row.cells[3].text = ''
                 style_summary_row(row)
 
         try:
