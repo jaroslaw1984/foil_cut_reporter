@@ -131,37 +131,62 @@ class ReportEngine:
 
     # --- POMOCNICZA METODA DO USTAWIANIA STATUSU RAPORTU W KOLEJCE ---
     def generate_word_report(self, report_data: dict, machine_name: str, output_path: str):
-        """Generuje raport z zachowaniem technicznego układu. Obsługuje 3 strony (Zew, Wew, Górna)."""
         doc = Document()
         
-        # 1. Numeracja stron w stopce
         self._add_page_numbering(doc)
         
         header = doc.add_heading(f'RAPORT CIĘCIA FOLII - {machine_name}', 0)
         header.alignment = WD_ALIGN_PARAGRAPH.CENTER
         
         data_dict = report_data.get("data", report_data)
-        combined = data_dict.get('combined_side', [])
         
-        # --- ZMIANA: Dynamiczna numeracja sekcji w zależności od trybu ---
+        combined = data_dict.get('combined_side', [])
+        sequence = data_dict.get('production_sequence', [])
+        
+        # --- ZMIANA: Dynamiczne grupowanie nagłówków na podstawie stron ---
         if combined:
             # === TRYB KOMBAJNU ===
             doc.add_heading('1. STRONA ZEWNĘTRZNA, WEWNĘTRZNA I GÓRNA (KOMBAJN)', level=1)
             self._fill_decor_section(doc, combined)
-            next_num = 2  # Sumy zaczną się od 2
-        else:
-            # === TRYB STANDARDOWY ===
-            doc.add_heading('1. STRONA ZEWNĘTRZNA', level=1)
-            self._fill_decor_section(doc, data_dict.get('outer_side', []))
-
-            doc.add_heading('2. STRONA WEWNĘTRZNA', level=1)
-            self._fill_decor_section(doc, data_dict.get('inner_side', []))
-
-            # --- DODANO: Strona Górna (0023) ---
-            doc.add_heading('3. STRONA GÓRNA', level=1)
-            self._fill_decor_section(doc, data_dict.get('top_side', []))
+            next_num = 2
+        elif sequence:
+            # === TRYB CHRONOLOGICZNIE PRZEPLATANY ===
+            current_side = sequence[0].get('side_desc', 'Zewn.')
+            chunk = []
+            section_num = 1
             
-            next_num = 4  # Sumy zaczną się od 4
+            side_to_title = {
+                'Zewn.': 'STRONA ZEWNĘTRZNA',
+                'Wewn.': 'STRONA WEWNĘTRZNA',
+                'Górna': 'STRONA GÓRNA'
+            }
+            
+            for item in sequence:
+                side_desc = item.get('side_desc', '')
+                if side_desc == current_side:
+                    chunk.append(item)
+                else:
+                    # Rysujemy zebrany blok i jego nagłówek
+                    title = side_to_title.get(current_side, 'STRONA NIEZNANA')
+                    doc.add_heading(f'{section_num}. {title}', level=1)
+                    self._fill_decor_section(doc, chunk)
+                    
+                    # Otwieramy nowy blok i zwiększamy numerację
+                    section_num += 1
+                    current_side = side_desc
+                    chunk = [item]
+                    
+            # Rysujemy ostatni, pozostały blok w pamięci
+            if chunk:
+                title = side_to_title.get(current_side, 'STRONA NIEZNANA')
+                doc.add_heading(f'{section_num}. {title}', level=1)
+                self._fill_decor_section(doc, chunk)
+                section_num += 1
+                
+            next_num = section_num
+        else:
+            doc.add_heading('1. BRAK DANYCH', level=1)
+            next_num = 2
 
         summary_widths = (Cm(1.5), Cm(6.5), Cm(3.5), Cm(5.5))
         def style_summary_row(row):
@@ -207,8 +232,7 @@ class ReportEngine:
         doc.add_heading(f'{next_num + 1}. Folia dekoracyjna (SUMA ZBIORCZA)', level=1)
         
         decor_summary = {}
-        # --- ZMIANA: Zbieramy też metry z 'top_side' ---
-        for side in ['outer_side', 'inner_side', 'top_side', 'combined_side']:
+        for side in ['production_sequence', 'combined_side']:
             for item in data_dict.get(side, []):
                 idnrk = item['idnrk']
                 decor_summary[idnrk] = decor_summary.get(idnrk, 0.0) + item['meters']
@@ -333,6 +357,7 @@ class ReportEngine:
                 val_str = f"{item['meters']:.1f}".replace('.', ',')
                 row_cells[3].paragraphs[0].add_run(val_str).bold = True
                 
-                row_cells[4].text = ''
+                # --- ZMIANA: Wstawiamy opis strony (np. Wewn.) do uwag ---
+                row_cells[4].text = item.get('side_desc', '') 
                 
                 style_row(row)
