@@ -133,17 +133,33 @@ class ReportEngine:
     def generate_word_report(self, report_data: dict, machine_name: str, output_path: str):
         doc = Document()
         
+        # --- ZMIANA: Zmniejszenie marginesów TYLKO dla góry i dołu (boczne wracają do normy) ---
+        section = doc.sections[0]
+        section.top_margin = Cm(1.27)
+        section.bottom_margin = Cm(1.27)
+        
         self._add_page_numbering(doc)
         
-        header = doc.add_heading(f'RAPORT CIĘCIA FOLII - {machine_name}', 0)
+        # --- ZMIANA: Nowy nagłówek z wielkością czcionki dostosowaną do 18 Pt ---
+        snap_date = report_data.get("snapshot_date", "")
+        header_text = f"{machine_name}"
+        if snap_date:
+             header_text += f" - zapotrzebowanie na {snap_date}"
+             
+        header = doc.add_heading(header_text, 0)
         header.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        header.paragraph_format.space_after = Pt(0) 
+        
+        # Ustawienie rozmiaru czcionki nagłówka głównego na 18 Pt
+        for run in header.runs:
+            run.font.size = Pt(18)
         
         data_dict = report_data.get("data", report_data)
         
         combined = data_dict.get('combined_side', [])
         sequence = data_dict.get('production_sequence', [])
         
-        # --- ZMIANA: Dynamiczne grupowanie nagłówków na podstawie stron ---
+        # --- Dynamiczne grupowanie nagłówków na podstawie stron ---
         if combined:
             # === TRYB KOMBAJNU ===
             doc.add_heading('1. STRONA ZEWNĘTRZNA, WEWNĘTRZNA I GÓRNA (KOMBAJN)', level=1)
@@ -166,17 +182,14 @@ class ReportEngine:
                 if side_desc == current_side:
                     chunk.append(item)
                 else:
-                    # Rysujemy zebrany blok i jego nagłówek
                     title = side_to_title.get(current_side, 'STRONA NIEZNANA')
                     doc.add_heading(f'{section_num}. {title}', level=1)
                     self._fill_decor_section(doc, chunk)
                     
-                    # Otwieramy nowy blok i zwiększamy numerację
                     section_num += 1
                     current_side = side_desc
                     chunk = [item]
                     
-            # Rysujemy ostatni, pozostały blok w pamięci
             if chunk:
                 title = side_to_title.get(current_side, 'STRONA NIEZNANA')
                 doc.add_heading(f'{section_num}. {title}', level=1)
@@ -193,10 +206,9 @@ class ReportEngine:
             for i, cell in enumerate(row.cells):
                 cell.width = summary_widths[i]
                 for p in cell.paragraphs:
-                    p.paragraph_format.space_before = Pt(4)
-                    p.paragraph_format.space_after = Pt(4)
+                    p.paragraph_format.space_before = Pt(2)
+                    p.paragraph_format.space_after = Pt(2)
 
-        # Sekcja folii ochronnej z dynamicznym numerem
         doc.add_page_break()
         doc.add_heading(f'{next_num}. Folia ochronna (SUMA ZBIORCZA)', level=1)
         protective = data_dict.get('protective', {})
@@ -227,7 +239,6 @@ class ReportEngine:
                 row.cells[3].text = '' 
                 style_summary_row(row)
 
-        # Sekcja sumy dekorów z dynamicznym numerem
         doc.add_page_break()
         doc.add_heading(f'{next_num + 1}. Folia dekoracyjna (SUMA ZBIORCZA)', level=1)
         
@@ -356,8 +367,6 @@ class ReportEngine:
                 # Formatowanie do 1 miejsca po przecinku z polskim przecinkiem
                 val_str = f"{item['meters']:.1f}".replace('.', ',')
                 row_cells[3].paragraphs[0].add_run(val_str).bold = True
-                
-                # --- ZMIANA: Wstawiamy opis strony (np. Wewn.) do uwag ---
-                row_cells[4].text = item.get('side_desc', '') 
+                row_cells[4].text = ''
                 
                 style_row(row)
