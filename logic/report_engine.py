@@ -133,40 +133,45 @@ class ReportEngine:
     def generate_word_report(self, report_data: dict, machine_name: str, output_path: str):
         doc = Document()
         
-        # --- ZMIANA: Zmniejszenie marginesów TYLKO dla góry i dołu (boczne wracają do normy) ---
+        # Pierwsza sekcja - standardowo zmniejszamy tylko górę i dół
         section = doc.sections[0]
-        section.top_margin = Cm(1.27)
-        section.bottom_margin = Cm(1.27)
+        section.top_margin = Cm(0.5)
+        section.bottom_margin = Cm(1.0)
         
         self._add_page_numbering(doc)
         
-        # --- ZMIANA: Nowy nagłówek z wielkością czcionki dostosowaną do 18 Pt ---
+        # Przygotowanie tekstu nagłówka głównego
         snap_date = report_data.get("snapshot_date", "")
-        header_text = f"{machine_name}"
-        if snap_date:
-             header_text += f" - zapotrzebowanie na {snap_date}"
-             
-        header = doc.add_heading(header_text, 0)
-        header.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        header.paragraph_format.space_after = Pt(0) 
+        shift_info = report_data.get("shift_info", "")
         
-        # Ustawienie rozmiaru czcionki nagłówka głównego na 18 Pt
-        for run in header.runs:
-            run.font.size = Pt(18)
+        header_text = f"{machine_name}"
+        if shift_info:
+            header_text += f" - {shift_info}"
+        if snap_date:
+            header_text += f" - data wydruku: {snap_date}"
+             
+        # POMOCNICZA FUNKCJA DO RYSOWANIA GŁÓWNEGO NAGŁÓWKA NA KAŻDEJ STRONIE ZBIORCZEJ
+        def draw_main_header(document):
+            h = document.add_heading(header_text, 0)
+            h.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            h.paragraph_format.space_after = Pt(0) 
+            for run in h.runs:
+                run.font.size = Pt(14)
+
+        # Rysujemy nagłówek na pierwszej, głównej stronie
+        draw_main_header(doc)
         
         data_dict = report_data.get("data", report_data)
         
         combined = data_dict.get('combined_side', [])
         sequence = data_dict.get('production_sequence', [])
         
-        # --- Dynamiczne grupowanie nagłówków na podstawie stron ---
+        # --- Sekcja GŁÓWNEJ LISTY ---
         if combined:
-            # === TRYB KOMBAJNU ===
             doc.add_heading('1. STRONA ZEWNĘTRZNA, WEWNĘTRZNA I GÓRNA (KOMBAJN)', level=1)
             self._fill_decor_section(doc, combined)
             next_num = 2
         elif sequence:
-            # === TRYB CHRONOLOGICZNIE PRZEPLATANY ===
             current_side = sequence[0].get('side_desc', 'Zewn.')
             chunk = []
             section_num = 1
@@ -209,13 +214,18 @@ class ReportEngine:
                     p.paragraph_format.space_before = Pt(2)
                     p.paragraph_format.space_after = Pt(2)
 
-        doc.add_page_break()
-        doc.add_heading(f'{next_num}. Folia ochronna (SUMA ZBIORCZA)', level=1)
+        # --- Sekcja FOLIA OCHRONNA ---
         protective = data_dict.get('protective', {})
         
-        if not protective:
-            doc.add_paragraph("Brak folii ochronnych.")
-        else:
+        # ZMIANA 1: Ukrywamy całkowicie stronę, jeśli brak folii ochronnej!
+        if protective:
+            doc.add_page_break()
+            
+            # ZMIANA 2: Dopisujemy nagłówek "Maszyna X - zapotrzebowanie..."
+            draw_main_header(doc)
+            
+            doc.add_heading(f'{next_num}. Folia ochronna (SUMA ZBIORCZA)', level=1)
+            
             prot_table = doc.add_table(rows=1, cols=4)
             prot_table.style = 'Table Grid'
             hdr_cells = prot_table.rows[0].cells
@@ -238,41 +248,87 @@ class ReportEngine:
                 
                 row.cells[3].text = '' 
                 style_summary_row(row)
+                
+            next_num += 1
 
-        doc.add_page_break()
-        doc.add_heading(f'{next_num + 1}. Folia dekoracyjna (SUMA ZBIORCZA)', level=1)
-        
+        # --- Sekcja FOLIA DEKORACYJNA ---
         decor_summary = {}
         for side in ['production_sequence', 'combined_side']:
             for item in data_dict.get(side, []):
                 idnrk = item['idnrk']
                 decor_summary[idnrk] = decor_summary.get(idnrk, 0.0) + item['meters']
                 
-        if not decor_summary:
-            doc.add_paragraph("Brak folii dekoracyjnych.")
-        else:
-            decor_table = doc.add_table(rows=1, cols=4)
+        if decor_summary:
+            # ZMIANA 3: Tworzymy nową sekcję Worda specjalnie na folie dekoracyjne!
+            # Pozwala to zredukować lewy i prawy margines niemal do zera na tej jednej stronie.
+            new_section = doc.add_section()
+            new_section.top_margin = Cm(0.5)
+            new_section.bottom_margin = Cm(0.5)
+            new_section.left_margin = Cm(0.5)
+            new_section.right_margin = Cm(0.5)
+            
+            # Nagłówek główny na górze
+            draw_main_header(doc)
+            
+            doc.add_heading(f'{next_num}. Folia dekoracyjna (SUMA ZBIORCZA)', level=1)
+            
+            # ZMIANA 3 cd.: Budujemy tabelę złożoną z 8 kolumn! (Lewa i Prawa strona w jednym)
+            decor_table = doc.add_table(rows=1, cols=8)
             decor_table.style = 'Table Grid'
             hdr_cells = decor_table.rows[0].cells
+            
+            # Nagłówki lewej części
             hdr_cells[0].text = 'Lp.'
-            hdr_cells[1].text = 'Indeks folii'
-            hdr_cells[2].text = 'Dł. [mb]'
+            hdr_cells[1].text = 'Indeks'
+            hdr_cells[2].text = 'Dł.[mb]'
             hdr_cells[3].text = 'Uwagi'
-            style_summary_row(decor_table.rows[0])
+            # Nagłówki prawej części
+            hdr_cells[4].text = 'Lp.'
+            hdr_cells[5].text = 'Indeks'
+            hdr_cells[6].text = 'Dł.[mb]'
+            hdr_cells[7].text = 'Uwagi'
 
-            for idx, symbol in enumerate(sorted(decor_summary.keys()), start=1):
-                meters_sum = decor_summary[symbol]
+            # Specjalne szerokości - suma daje nam równe 20 cm!
+            decor_widths = (Cm(0.8), Cm(2.7), Cm(1.7), Cm(4.8), Cm(0.8), Cm(2.7), Cm(1.7), Cm(4.8))
+
+            def style_decor_row(row):
+                for i, cell in enumerate(row.cells):
+                    cell.width = decor_widths[i]
+                    for p in cell.paragraphs:
+                        p.paragraph_format.space_before = Pt(2)
+                        p.paragraph_format.space_after = Pt(2)
+
+            style_decor_row(decor_table.rows[0])
+
+            # Dzielimy listę folii na pół
+            keys = sorted(decor_summary.keys())
+            mid = (len(keys) + 1) // 2
+
+            for i in range(mid):
                 row = decor_table.add_row()
-                row.cells[0].text = str(idx)
-                row.cells[1].text = symbol
-                
-                val_str = f"{meters_sum:.1f}".replace('.', ',')
-                run_m = row.cells[2].paragraphs[0].add_run(val_str)
-                run_m.bold = True
-                run_m.font.color.rgb = RGBColor(0x00, 0x66, 0xCC)
-                
+
+                # Lewa strona danych
+                left_key = keys[i]
+                row.cells[0].text = str(i + 1)
+                row.cells[1].text = left_key
+                val_str_l = f"{decor_summary[left_key]:.1f}".replace('.', ',')
+                run_l = row.cells[2].paragraphs[0].add_run(val_str_l)
+                run_l.bold = True
+                run_l.font.color.rgb = RGBColor(0x00, 0x66, 0xCC)
                 row.cells[3].text = ''
-                style_summary_row(row)
+
+                # Prawa strona danych (jeśli występuje)
+                if i + mid < len(keys):
+                    right_key = keys[i + mid]
+                    row.cells[4].text = str(i + mid + 1)
+                    row.cells[5].text = right_key
+                    val_str_r = f"{decor_summary[right_key]:.1f}".replace('.', ',')
+                    run_r = row.cells[6].paragraphs[0].add_run(val_str_r)
+                    run_r.bold = True
+                    run_r.font.color.rgb = RGBColor(0x00, 0x66, 0xCC)
+                    row.cells[7].text = ''
+
+                style_decor_row(row)
 
         try:
             doc.save(output_path)
