@@ -264,7 +264,7 @@ class ReportEngine:
             new_section = doc.add_section()
             new_section.top_margin = Cm(0.5)
             new_section.bottom_margin = Cm(0.5)
-            new_section.left_margin = Cm(0.5)
+            new_section.left_margin = Cm(1.0)
             new_section.right_margin = Cm(0.5)
             
             # Nagłówek główny na górze
