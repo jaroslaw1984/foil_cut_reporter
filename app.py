@@ -1,7 +1,6 @@
 import customtkinter as ctk
 import os
 import json
-import shutil
 import time
 from datetime import date
 from pathlib import Path
@@ -9,6 +8,8 @@ from gui.components.machine_card import MachineCard
 from database.db_manager import DBManager
 from logic.report_engine import ReportEngine
 from config.paths import FOIL_REPORTS_PATH
+from config.version import PROGRAM_NAME, PROGRAM_VERSION
+from gui.components.popup_about import AboutPopup
 
 class FoilApp(ctk.CTk):
     def __init__(self):
@@ -22,7 +23,7 @@ class FoilApp(ctk.CTk):
         # Przy starcie aplikacji czyścimy folder historii, usuwając pliki starsze niż 10 dni
         self.cleanup_history_folder()
 
-        self.title("Drukowanie raportów - FOIL CUT REPORTER")
+        self.title(f"{PROGRAM_NAME} v{PROGRAM_VERSION}")
         self.geometry("900x600")
         
         # --- Sidebar ---
@@ -35,9 +36,12 @@ class FoilApp(ctk.CTk):
         self.btn_refresh = ctk.CTkButton(self.sidebar, text="Odśwież dane", command=self.refresh_machines)
         self.btn_refresh.pack(pady=10, padx=20)
         
-        self.btn_history = ctk.CTkButton(self.sidebar, text="Historia raportów", command=self.open_history_folder, fg_color="#328354", hover_color="#2ecc71")
+        self.btn_history = ctk.CTkButton(self.sidebar, text="Historia raportów", command=self.open_history_folder, fg_color="#328354", hover_color="#28aa5e")
         self.btn_history.pack(pady=10, padx=20)
-
+        
+        self.btn_about = ctk.CTkButton(self.sidebar, text="O programie", command=self.popup_about, fg_color="#b64f13", hover_color="#d36120")
+        self.btn_about.pack(pady=10, padx=20)
+        
         # --- Main Area ---
         self.scrollable_frame = ctk.CTkScrollableFrame(self, label_text="Lista Maszyn Produkcyjnych")
         self.scrollable_frame.pack(side="right", fill="both", expand=True, padx=20, pady=20)
@@ -197,6 +201,9 @@ class FoilApp(ctk.CTk):
         self.refresh_machines()
         # 30000 ms = 30 sekund
         self.after(30000, self.auto_refresh)    
+        
+    def popup_about(self):
+        AboutPopup(self)
         
 if __name__ == "__main__":
     print("[DEBUG] 1. Uruchamianie skryptu...")
