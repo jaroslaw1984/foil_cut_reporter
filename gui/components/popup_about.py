@@ -126,7 +126,7 @@ class AboutPopup(ctk.CTkToplevel):
         self._start_updater_and_exit(current_app_dir, exe_name)            
     
     def _start_updater_and_exit(self, current_app_dir: Path, exe_name: str) -> None:
-        updater_exe = current_app_dir.parent / "ProductionCounter_updater.exe"
+        updater_exe = current_app_dir.parent / "Foil_cutreporter_updater.exe"
         if not updater_exe.exists():
             messagebox.showerror("Aktualizacja", f"Brak updatera:\n{updater_exe}")
             return
