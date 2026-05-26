@@ -211,8 +211,8 @@ class ReportEngine:
             for i, cell in enumerate(row.cells):
                 cell.width = summary_widths[i]
                 for p in cell.paragraphs:
-                    p.paragraph_format.space_before = Pt(2)
-                    p.paragraph_format.space_after = Pt(2)
+                    p.paragraph_format.space_before = Pt(5)
+                    p.paragraph_format.space_after = Pt(5)
 
         # --- Sekcja FOLIA OCHRONNA ---
         protective = data_dict.get('protective', {})
@@ -295,8 +295,8 @@ class ReportEngine:
                 for i, cell in enumerate(row.cells):
                     cell.width = decor_widths[i]
                     for p in cell.paragraphs:
-                        p.paragraph_format.space_before = Pt(2)
-                        p.paragraph_format.space_after = Pt(2)
+                        p.paragraph_format.space_before = Pt(5)
+                        p.paragraph_format.space_after = Pt(5)
 
             style_decor_row(decor_table.rows[0])
 
