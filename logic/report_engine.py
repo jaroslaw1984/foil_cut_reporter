@@ -156,7 +156,7 @@ class ReportEngine:
             h.alignment = WD_ALIGN_PARAGRAPH.CENTER
             h.paragraph_format.space_after = Pt(0) 
             for run in h.runs:
-                run.font.size = Pt(14)
+                run.font.size = Pt(18)
 
         # Rysujemy nagłówek na pierwszej, głównej stronie
         draw_main_header(doc)
