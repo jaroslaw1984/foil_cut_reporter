@@ -9,7 +9,7 @@ DATABASE = "hydrawlo"
 VIEW_FULLNAME = "hydadm.SOP_Abfrage_Auftragsbestand_Sochacki"
 SAP_SERVER = "kronos.sip.local"
 SAP_DATABASE = "Raporty"
-FOIL_REPORTS_PATH = r"\\na02\groups\Produkcja\Planowanie OKL\Production Counter Program\FoilReports"
+FOIL_REPORTS_PATH = r"\\na02\groups\3.PROJEKTY\Production Counter Program\FoilReports"
 
 # --- ścieżka do pliku z helpem ---
-LATEST_JSON_PATH = r"\\na02\groups\Produkcja\Planowanie OKL\Production Counter Program\FoilReports\latest.json"
+LATEST_JSON_PATH = r"\\na02\groups\3.PROJEKTY\Production Counter Program\FoilReports\latest.json"
