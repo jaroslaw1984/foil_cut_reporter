@@ -7,7 +7,7 @@ from pathlib import Path
 from gui.components.machine_card import MachineCard
 from database.db_manager import DBManager
 from logic.report_engine import ReportEngine
-from config.paths import FOIL_REPORTS_PATH
+from config.paths import FOIL_REPORTS_PATH, HISTORY_PATH
 from config.version import PROGRAM_NAME, PROGRAM_VERSION
 from gui.components.popup_about import AboutPopup
 
@@ -98,7 +98,7 @@ class FoilApp(ctk.CTk):
         json_path = Path(FOIL_REPORTS_PATH) / f"{safe_machine_name}_{today_str}.json"
         
         # --- LOKALIZACJA HISTORII ---
-        history_dir = Path(r"R:\Produkcja\Planowanie OKL\Production Counter Program\FoilReports\history")
+        history_dir = Path(HISTORY_PATH)
         history_dir.mkdir(parents=True, exist_ok=True) # Tworzy katalog, jeśli nie istnieje
         
         if not json_path.exists():
@@ -139,7 +139,7 @@ class FoilApp(ctk.CTk):
 
     def cleanup_history_folder(self):
         """Usuwa raporty Word starsze niż 10 dni z folderu historii."""
-        history_dir = Path(r"R:\Produkcja\Planowanie OKL\Production Counter Program\FoilReports\history")
+        history_dir = Path(HISTORY_PATH)
         
         # Jeśli katalog nie istnieje, nie mamy czego czyścić
         if not history_dir.exists():
@@ -163,7 +163,7 @@ class FoilApp(ctk.CTk):
             
     def open_history_folder(self):
         """Otwiera folder z historią raportów w Eksploratorze Windows."""
-        history_dir = Path(r"R:\Produkcja\Planowanie OKL\Production Counter Program\FoilReports\history")
+        history_dir = Path(HISTORY_PATH)
         
         # Jeśli z jakiegoś powodu katalog jeszcze nie istnieje (np. świeża instalacja), program go najpierw utworzy
         history_dir.mkdir(parents=True, exist_ok=True)
