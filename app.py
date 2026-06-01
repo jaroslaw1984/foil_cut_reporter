@@ -2,7 +2,7 @@ import customtkinter as ctk
 import os
 import json
 import time
-from datetime import date
+from datetime import datetime
 from pathlib import Path
 from gui.components.machine_card import MachineCard
 from database.db_manager import DBManager
@@ -18,7 +18,7 @@ class FoilApp(ctk.CTk):
         self.db = self.db_manager  
         
         # Zbiór do śledzenia wydrukowanych maszyn
-        self.printed_machines = set()  
+        self.printed_files = set()  
         
         # Przy starcie aplikacji czyścimy folder historii, usuwając pliki starsze niż 10 dni
         self.cleanup_history_folder()
@@ -52,15 +52,16 @@ class FoilApp(ctk.CTk):
     def refresh_machines(self):
         print("[DEBUG] 2. Próbuję połączyć się z bazą Kronos...")
         active_machines = self.db_manager.fetch_active_machines()
-        print(f"[DEBUG] 3. Sukces! Pobrane maszyny: {active_machines}")
+        print(f"[DEBUG] 3. Sukces! Pobrane maszyny z bazy: {active_machines}")
         
-        active_machines = self.db_manager.fetch_active_machines()
-        
-        # Czyszczenie widoku
         for widget in self.scrollable_frame.winfo_children():
             widget.destroy()
 
-        if not active_machines:
+        # --- ZMIANA: Pobieramy wszystkie pliki JSON z folderu raportów ---
+        json_files = list(Path(FOIL_REPORTS_PATH).glob("*.json"))
+
+        # Jeśli brak plików oraz brak maszyn w bazie, wyświetl komunikat
+        if not json_files and not active_machines:
             self.no_orders_label = ctk.CTkLabel(
                 self.scrollable_frame, 
                 text="BRAK NOWYCH ZLECEŃ\nRAPORT POJAWI SIĘ AUTOMATYCZNIE", 
@@ -70,41 +71,39 @@ class FoilApp(ctk.CTk):
             self.no_orders_label.pack(pady=100)
             return
 
-        # 2. Budujemy karty TYLKO dla aktywnych maszyn
-        for name in active_machines:
+        # 2. Budujemy karty na podstawie fizycznych plików JSON
+        for json_path in json_files:
+            try:
+                with open(json_path, "r", encoding="utf-8") as f:
+                    payload = json.load(f)
+                machine_name = payload.get("machine", "Nieznana Maszyna")
+            except Exception:
+                # W razie błędu odczytu, bierzemy nazwę ze splitu nazwy pliku
+                machine_name = json_path.stem.split("_")[0]
+
             card = MachineCard(
                 self.scrollable_frame, 
-                machine_name=name
+                machine_name=machine_name
             )
             
-            # Przypisujemy komendy po utworzeniu karty. 
-            # Używamy sztuczki z lambda `n=name, c=card`, aby zamrozić wartości zmiennych w pętli.
-            card.btn_print.configure(command=lambda n=name, c=card: self.print_machine_report(n, c))
-            card.btn_delete.configure(command=lambda n=name: self.delete_machine_report(n))
+            # --- ZMIANA: Przekazujemy konkretną ścieżkę (jp) pliku do funkcji ---
+            card.btn_print.configure(command=lambda n=machine_name, c=card, jp=json_path: self.print_machine_report(n, c, jp))
+            card.btn_delete.configure(command=lambda n=machine_name, jp=json_path: self.delete_machine_report(n, jp))
             
             card.pack(fill="x", pady=5, padx=5)
             card.update_status(has_data=True)
             
-            if name in self.printed_machines:
+            # Oznaczamy jako wydrukowane na podstawie ścieżki pliku
+            if str(json_path) in self.printed_files:
                 card.mark_as_printed()
 
-    def print_machine_report(self, machine_name, card):
-        print(f"--- Uruchamiam generowanie raportu dla maszyny: {machine_name} ---")
+    def print_machine_report(self, machine_name, card, json_path):
+        print(f"--- Uruchamiam generowanie raportu dla pliku: {json_path.name} ---")
         
         engine = ReportEngine(self.db)
-
-        safe_machine_name = str(machine_name).replace("/", "-").replace("\\", "-")
-        today_str = date.today().strftime("%Y-%m-%d")
-        json_path = Path(FOIL_REPORTS_PATH) / f"{safe_machine_name}_{today_str}.json"
-        
-        # --- LOKALIZACJA HISTORII ---
         history_dir = Path(HISTORY_PATH)
-        history_dir.mkdir(parents=True, exist_ok=True) # Tworzy katalog, jeśli nie istnieje
+        history_dir.mkdir(parents=True, exist_ok=True)
         
-        if not json_path.exists():
-            print(f"Błąd: Nie znaleziono pliku JSON -> {json_path}")
-            return
-            
         try:
             with open(json_path, "r", encoding="utf-8") as f:
                 payload = json.load(f)
@@ -123,14 +122,17 @@ class FoilApp(ctk.CTk):
         )
 
         if has_data:
-            # Drukujemy Worda OD RAZU do katalogu historii
-            word_output_path = history_dir / f"Raport_Folie_{safe_machine_name}_{today_str}.docx"
+            # --- ZMIANA: Unikalna nazwa pliku Worda z sekundnikiem ---
+            safe_machine_name = str(machine_name).replace("/", "-").replace("\\", "-")
+            stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            word_output_path = history_dir / f"Raport_Folie_{safe_machine_name}_{stamp}.docx"
+            
             success = engine.generate_word_report(final_report, machine_name, str(word_output_path))
             
             if success:
                 os.startfile(str(word_output_path))
-                
-                self.printed_machines.add(machine_name)
+                # Zapisujemy do pamięci, że TEN KONKRETNY PLIK JSON został wydrukowany
+                self.printed_files.add(str(json_path))
                 card.mark_as_printed()
         else:
             print("Raport jest pusty po przeliczeniu.")
@@ -174,26 +176,33 @@ class FoilApp(ctk.CTk):
         except Exception as e:
             print(f"Błąd podczas otwierania folderu historii: {e}")        
 
-    def delete_machine_report(self, machine_name):
-        """Usuwa raport z bazy, czyści pamięć podręczną i trwale kasuje plik JSON."""
-        print(f"--- Usuwanie raportu dla maszyny: {machine_name} ---")
+    def delete_machine_report(self, machine_name, json_path):
+        """Usuwa konkretny raport, a jeśli to był ostatni dla tej maszyny - czyści flagę w bazie."""
+        print(f"--- Usuwanie raportu: {json_path.name} ---")
         
-        self.db.mark_report_done(machine_name)
-        
-        if machine_name in self.printed_machines:
-            self.printed_machines.remove(machine_name)
+        if str(json_path) in self.printed_files:
+            self.printed_files.remove(str(json_path))
             
-        # --- BEZPOWROTNE USUWANIE PLIKU JSON ---
-        safe_machine_name = str(machine_name).replace("/", "-").replace("\\", "-")
-        today_str = date.today().strftime("%Y-%m-%d")
-        json_path = Path(FOIL_REPORTS_PATH) / f"{safe_machine_name}_{today_str}.json"
-        
+        # 1. Usuwamy konkretny plik JSON
         if json_path.exists():
             try:
-                os.remove(json_path) # Używamy zwykłego os.remove
+                os.remove(json_path)
                 print(f"Trwale usunięto plik JSON: {json_path.name}")
             except Exception as e:
                 print(f"Błąd podczas usuwania pliku JSON: {e}")
+                
+        # 2. Inteligentne czyszczenie bazy: Sprawdzamy czy został jakiś inny plik dla tej maszyny
+        remaining_files = False
+        safe_machine_name = str(machine_name).replace("/", "-").replace("\\", "-")
+        for p in Path(FOIL_REPORTS_PATH).glob("*.json"):
+            if safe_machine_name in p.name:
+                remaining_files = True
+                break
+                
+        # 3. Jeśli usunęliśmy ostatni raport, gasimy sygnał w Kronosie
+        if not remaining_files:
+            self.db.mark_report_done(machine_name)
+            print(f"Oczyszczono kolejkę dla {machine_name}. Wysłano sygnał do bazy.")
         
         self.refresh_machines()
         
