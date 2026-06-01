@@ -188,13 +188,19 @@ class AboutPopup(ctk.CTkToplevel):
                 # Zamiast dotykać GUI bezpośrednio, zlecamy to głównemu wątkowi okna przez .after(0, ...)
                 self.after(0, lambda: self._on_update_check_done(server_version, None))
             except Exception as e:
-                self.after(0, lambda: self._on_update_check_done(None, f"{type(e).__name__}: {e}"))
+                # ZMIANA: Zapisujemy treść błędu do zmiennej tekstowej, zanim 'e' zostanie usunięte z pamięci
+                err_msg = f"{type(e).__name__}: {e}"
+                self.after(0, lambda: self._on_update_check_done(None, err_msg))
 
         t = threading.Thread(target=worker, daemon=True)
         t.start()
 
     # --- Ta funkcja wywoływana jest po zakończeniu wątku i bezpiecznie aktualizuje widok ---
     def _on_update_check_done(self, server_version: str | None, error: str | None):
+        # ZMIANA: Zabezpieczenie na wypadek, gdyby użytkownik zdążył zamknąć okno zanim wątek skończył pracę
+        if not self.winfo_exists():
+            return
+
         if error:
             self.status_var.set(f"Nie mogę sprawdzić aktualizacji:\n{error}")
             return
@@ -206,4 +212,4 @@ class AboutPopup(ctk.CTkToplevel):
             self.update_btn.grid()  # Pokazujemy ukryty wcześniej przycisk
         else:
             self.status_var.set("Posiadasz najnowszą wersję programu.")
-            self.update_btn.grid_remove()      
+            self.update_btn.grid_remove()  
