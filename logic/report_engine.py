@@ -214,7 +214,6 @@ class ReportEngine:
             prot_table = doc.add_table(rows=0, cols=3)
             prot_table.style = 'Table Grid'
             
-            # ZMIANA: Indeks zmniejszony do 3.0 cm, Długość przywrócona do 3.5 cm, Uwagi mocno powiększone (10.5 cm)
             prot_widths = (Cm(3.0), Cm(3.5), Cm(10.5)) 
             def style_prot_row(row):
                 for i, cell in enumerate(row.cells):
@@ -260,7 +259,6 @@ class ReportEngine:
             decor_table = doc.add_table(rows=0, cols=6)
             decor_table.style = 'Table Grid'
             
-            # ZMIANA: Indeks zmniejszony do 2.5 cm, Długość przywrócona (2.5 cm), Uwagi mocno powiększone (5.0 cm)
             decor_widths = (Cm(2.5), Cm(2.5), Cm(5.0), Cm(2.5), Cm(2.5), Cm(5.0))
 
             def style_decor_row(row):
@@ -270,7 +268,11 @@ class ReportEngine:
                         p.paragraph_format.space_before = Pt(5)
                         p.paragraph_format.space_after = Pt(5)
 
-            keys = sorted(decor_summary.keys())
+            # ZMIANA: Sortowanie od szerokości (liczbowo), a jeśli szerokości są równe, alfabetycznie po kolorze
+            keys = sorted(
+                decor_summary.keys(), 
+                key=lambda k: (self._extract_width_and_type(k)[1], self._extract_width_and_type(k)[0])
+            )
             mid = (len(keys) + 1) // 2
 
             for i in range(mid):
