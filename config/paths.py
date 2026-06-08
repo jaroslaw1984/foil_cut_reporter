@@ -9,9 +9,11 @@ DATABASE = "hydrawlo"
 VIEW_FULLNAME = "hydadm.SOP_Abfrage_Auftragsbestand_Sochacki"
 SAP_SERVER = "kronos.sip.local"
 SAP_DATABASE = "Raporty"
+
+# --- ścieżka do folderu z raportami cięcia folii ---
 FOIL_REPORTS_PATH = r"\\na02\groups\3.PROJEKTY\Production Counter Program\FoilReports"
 
-# --- ścieżka do pliku z helpem ---
+# --- ścieżka do pliku JSON, który przechowuje wersję programu ---
 LATEST_JSON_PATH = r"\\na02\groups\3.PROJEKTY\Production Counter Program\FoilReports\update\latest.json"
 
 # --- ścieżka do folderu z historią raportów ---
