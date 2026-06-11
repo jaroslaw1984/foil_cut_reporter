@@ -1,5 +1,6 @@
 import pandas as pd
 import os
+import re
 from docx import Document
 from docx.shared import RGBColor, Cm, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -94,19 +95,25 @@ class ReportEngine:
         snap_date = report_data.get("snapshot_date", "")
         shift_info = report_data.get("shift_info", "")
         
+        # --- Usunięcie za pomocą REGEX z nagłówka '(zmiana 3)' na '(3)' ---
+        if shift_info:
+            shift_info = re.sub(r'\(zmiana\s+(\d+)\)', r'(\1)', shift_info)
+        
         header_text = f"{machine_name}"
         if shift_info:
             header_text += f" - {shift_info}"
         if snap_date:
-            header_text += f"          {snap_date}"
+            header_text += f"                {snap_date}"
              
         def draw_main_header(document):
             h = document.add_heading(header_text, 0)
             h.alignment = WD_ALIGN_PARAGRAPH.CENTER
             h.paragraph_format.space_after = Pt(0) 
             for run in h.runs:
-                run.font.size = Pt(18)
+                run.font.size = Pt(20)
                 run.bold = True
+                # --- Wymuszenie 100% czerni zamiast domyślnego szarego/niebieskiego z szablonu Worda ---
+                run.font.color.rgb = RGBColor(0x00, 0x00, 0x00)
 
         draw_main_header(doc)
         
@@ -219,11 +226,9 @@ class ReportEngine:
                 key=lambda k: (self._extract_width_and_type(k)[1], self._extract_width_and_type(k)[0])
             )
             
-            # ZMIANA: Skaczemy co 2 elementy i wypełniamy od lewej do prawej
             for i in range(0, len(keys), 2):
                 row = decor_table.add_row()
 
-                # Wypełnianie lewej strony (pierwszy element pary)
                 left_key = keys[i]
                 run_l = row.cells[0].paragraphs[0].add_run(left_key)
                 run_l.bold = True
@@ -233,7 +238,6 @@ class ReportEngine:
                 run_lm.bold = True
                 row.cells[2].text = ''
 
-                # Wypełnianie prawej strony (drugi element pary, o ile istnieje)
                 if i + 1 < len(keys):
                     right_key = keys[i + 1]
                     run_r = row.cells[3].paragraphs[0].add_run(right_key)
