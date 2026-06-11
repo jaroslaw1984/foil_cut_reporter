@@ -164,13 +164,12 @@ class ReportEngine:
         sequence = data_dict.get('production_sequence', [])
         
         if combined:
-            doc.add_heading('1. STRONA ZEWNĘTRZNA, WEWNĘTRZNA I GÓRNA (KOMBAJN)', level=1)
-            self._fill_decor_section(doc, combined)
-            next_num = 2
+            # ZMIANA: Przekazujemy tytuł strony bezpośrednio do funkcji dekorującej
+            self._fill_decor_section(doc, combined, side_title='STRONA ZEWNĘTRZNA, WEWNĘTRZNA (KOMBAJN)')
+            next_num = 1 # Ustawiamy na 1, aby Folia Ochronna była pierwszą pozycją numerowaną
         elif sequence:
             current_side = sequence[0].get('side_desc', 'Zewn.')
             chunk = []
-            section_num = 1
             
             side_to_title = {
                 'Zewn.': 'STRONA ZEWNĘTRZNA',
@@ -184,23 +183,20 @@ class ReportEngine:
                     chunk.append(item)
                 else:
                     title = side_to_title.get(current_side, 'STRONA NIEZNANA')
-                    doc.add_heading(f'{section_num}. {title}', level=1)
-                    self._fill_decor_section(doc, chunk)
+                    # ZMIANA: Wywołanie funkcji z przekazanym tytułem
+                    self._fill_decor_section(doc, chunk, side_title=title)
                     
-                    section_num += 1
                     current_side = side_desc
                     chunk = [item]
                     
             if chunk:
                 title = side_to_title.get(current_side, 'STRONA NIEZNANA')
-                doc.add_heading(f'{section_num}. {title}', level=1)
-                self._fill_decor_section(doc, chunk)
-                section_num += 1
+                self._fill_decor_section(doc, chunk, side_title=title)
                 
-            next_num = section_num
+            next_num = 1
         else:
-            doc.add_heading('1. BRAK DANYCH', level=1)
-            next_num = 2
+            doc.add_heading('BRAK DANYCH', level=1)
+            next_num = 1
 
         # --- Sekcja FOLIA OCHRONNA ---
         protective = data_dict.get('protective', {})
@@ -268,7 +264,6 @@ class ReportEngine:
                         p.paragraph_format.space_before = Pt(5)
                         p.paragraph_format.space_after = Pt(5)
 
-            # ZMIANA: Sortowanie od szerokości (liczbowo), a jeśli szerokości są równe, alfabetycznie po kolorze
             keys = sorted(
                 decor_summary.keys(), 
                 key=lambda k: (self._extract_width_and_type(k)[1], self._extract_width_and_type(k)[0])
@@ -309,7 +304,7 @@ class ReportEngine:
             return False
 
     # --- POMOCNICZA METODA DO WYPEŁNIANIA SEKCJI DEKORACYJNEJ ---
-    def _fill_decor_section(self, doc, data_list):
+    def _fill_decor_section(self, doc, data_list, side_title=""):
         if not data_list:
             doc.add_paragraph("Brak zleceń dla tej sekcji.")
             return
@@ -317,7 +312,6 @@ class ReportEngine:
         current_base_geometry = None
         table = None
         
-        # ZMIANA: Indeks zmniejszony do 2.5 cm, Długość przywrócona (3.0 cm), Uwagi powiększone (5.0 cm)
         widths = (Cm(6.5), Cm(2.5), Cm(3.0), Cm(5.0))
         
         def style_row(row):
@@ -333,7 +327,13 @@ class ReportEngine:
 
             if base_geometry != current_base_geometry:
                 current_base_geometry = base_geometry
-                doc.add_heading(f"Geometria: {base_geometry}", level=2)
+                
+                # ZMIANA: Sklejamy string bazy geometrii z tytułem strony w jednym nagłówku
+                heading_text = f"Geometria: {base_geometry}"
+                if side_title:
+                    heading_text += f" - {side_title}"
+                    
+                doc.add_heading(heading_text, level=2)
                 
                 table = doc.add_table(rows=0, cols=4)
                 table.style = 'Table Grid'
