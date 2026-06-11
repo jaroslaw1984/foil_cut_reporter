@@ -81,54 +81,6 @@ class ReportEngine:
             
         return foil_prefix, width
 
-    # --- GŁÓWNA METODA AGREGUJĄCA DANE W OPARCIU O POSNR ---
-    def aggregate_requirements(self, excel_df: pd.DataFrame, bom_df: pd.DataFrame, matnr_col="Artykuł", meters_col="Docelowa wartość (P)") -> dict:
-        """Agreguje dane w oparciu o POSNR."""
-        report_data = {
-            'outer_side': [],
-            'inner_side': [],
-            'protective': {} # {(idnrk): total_meters}
-        }
-
-        for _, row in excel_df.iterrows():
-            matnr = str(row[matnr_col]).strip()
-            meters = float(row[meters_col])
-            
-            requirements = bom_df[bom_df['MATNR'] == matnr]
-            
-            for _, bom_row in requirements.iterrows():
-                posnr = str(bom_row['POSNR']).strip()
-                idnrk = str(bom_row['IDNRK']).strip()
-                _, width = self._extract_width_and_type(idnrk)
-                
-                # Klasyfikacja na podstawie POSNR
-                if posnr in ['0050', '0060']:
-                    # Sumowanie zbiorcze wszystkich folii ochronnych
-                    report_data['protective'][idnrk] = report_data['protective'].get(idnrk, 0.0) + meters
-                
-                elif posnr == '0030':
-                    # Strona zewnętrzna (Dekor)
-                    self._add_to_sequential_list(report_data['outer_side'], idnrk, width, meters, matnr)
-                
-                elif posnr == '0020':
-                    # Strona wewnętrzna (Dekor)
-                    self._add_to_sequential_list(report_data['inner_side'], idnrk, width, meters, matnr)
-                        
-        return report_data
-
-    # --- POMOCNICZA METODA DO SUMOWANIA SEKWENCYJNEGO DEKORÓW ---
-    def _add_to_sequential_list(self, target_list, idnrk, width, meters, geometry):
-        """Pomocnicza metoda do sumowania sekwencyjnego dekorów."""
-        if target_list and target_list[-1]['idnrk'] == idnrk and target_list[-1]['geometry'] == geometry:
-            target_list[-1]['meters'] += meters
-        else:
-            target_list.append({
-                'idnrk': idnrk,
-                'width': width,
-                'meters': meters,
-                'geometry': geometry
-            })
-
     # --- GŁÓWNA METODA GENERUJĄCA DOKUMENT WORDA ---
     def generate_word_report(self, report_data: dict, machine_name: str, output_path: str):
         doc = Document()
@@ -146,7 +98,7 @@ class ReportEngine:
         if shift_info:
             header_text += f" - {shift_info}"
         if snap_date:
-            header_text += f" - data wydruku: {snap_date}"
+            header_text += f"          {snap_date}"
              
         def draw_main_header(document):
             h = document.add_heading(header_text, 0)
@@ -164,16 +116,15 @@ class ReportEngine:
         sequence = data_dict.get('production_sequence', [])
         
         if combined:
-            # ZMIANA: Przekazujemy tytuł strony bezpośrednio do funkcji dekorującej
-            self._fill_decor_section(doc, combined, side_title='STRONA ZEWNĘTRZNA, WEWNĘTRZNA (KOMBAJN)')
-            next_num = 1 # Ustawiamy na 1, aby Folia Ochronna była pierwszą pozycją numerowaną
+            self._fill_decor_section(doc, combined, side_title='ZEWNĘTRZNA, WEWNĘTRZNA (KOMBAJN)')
+            next_num = 1
         elif sequence:
             current_side = sequence[0].get('side_desc', 'Zewn.')
             chunk = []
             
             side_to_title = {
-                'Zewn.': 'STRONA ZEWNĘTRZNA',
-                'Wewn.': 'STRONA WEWNĘTRZNA',
+                'Zewn.': 'ZEWNĘTRZNA',
+                'Wewn.': 'WEWNĘTRZNA',
                 'Górna': 'STRONA GÓRNA'
             }
             
@@ -183,7 +134,6 @@ class ReportEngine:
                     chunk.append(item)
                 else:
                     title = side_to_title.get(current_side, 'STRONA NIEZNANA')
-                    # ZMIANA: Wywołanie funkcji z przekazanym tytułem
                     self._fill_decor_section(doc, chunk, side_title=title)
                     
                     current_side = side_desc
@@ -268,13 +218,13 @@ class ReportEngine:
                 decor_summary.keys(), 
                 key=lambda k: (self._extract_width_and_type(k)[1], self._extract_width_and_type(k)[0])
             )
-            mid = (len(keys) + 1) // 2
-
-            for i in range(mid):
+            
+            # ZMIANA: Skaczemy co 2 elementy i wypełniamy od lewej do prawej
+            for i in range(0, len(keys), 2):
                 row = decor_table.add_row()
 
+                # Wypełnianie lewej strony (pierwszy element pary)
                 left_key = keys[i]
-                
                 run_l = row.cells[0].paragraphs[0].add_run(left_key)
                 run_l.bold = True
                 
@@ -283,9 +233,9 @@ class ReportEngine:
                 run_lm.bold = True
                 row.cells[2].text = ''
 
-                if i + mid < len(keys):
-                    right_key = keys[i + mid]
-                    
+                # Wypełnianie prawej strony (drugi element pary, o ile istnieje)
+                if i + 1 < len(keys):
+                    right_key = keys[i + 1]
                     run_r = row.cells[3].paragraphs[0].add_run(right_key)
                     run_r.bold = True
                     
@@ -329,7 +279,7 @@ class ReportEngine:
                 current_base_geometry = base_geometry
                 
                 # ZMIANA: Sklejamy string bazy geometrii z tytułem strony w jednym nagłówku
-                heading_text = f"Geometria: {base_geometry}"
+                heading_text = base_geometry
                 if side_title:
                     heading_text += f" - {side_title}"
                     
