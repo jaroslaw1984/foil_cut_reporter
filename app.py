@@ -60,8 +60,8 @@ class FoilApp(ctk.CTk):
         # --- ZMIANA: Pobieramy wszystkie pliki JSON z folderu raportów ---
         json_files = list(Path(FOIL_REPORTS_PATH).glob("*.json"))
 
-        # Jeśli brak plików oraz brak maszyn w bazie, wyświetl komunikat
-        if not json_files and not active_machines:
+        # POPRAWKA: Upraszczamy warunek. Jeśli nie ma plików JSON gotowych do druku, to znaczy że nie ma zleceń.
+        if not json_files:
             self.no_orders_label = ctk.CTkLabel(
                 self.scrollable_frame, 
                 text="BRAK NOWYCH ZLECEŃ\nRAPORT POJAWI SIĘ AUTOMATYCZNIE", 
