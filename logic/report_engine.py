@@ -105,17 +105,35 @@ class ReportEngine:
         if snap_date:
             header_text += f"                {snap_date}"
              
+        # --- ZMIENIONY FRAGMENT DLA GŁÓWNEGO NAGŁÓWKA ---
         def draw_main_header(document):
-            h = document.add_heading(header_text, 0)
+            h = document.add_heading('', 0) # Tworzymy pusty nagłówek
             h.alignment = WD_ALIGN_PARAGRAPH.CENTER
             h.paragraph_format.space_after = Pt(0) 
-            for run in h.runs:
-                run.font.size = Pt(20)
-                run.bold = True
-                # --- Wymuszenie 100% czerni zamiast domyślnego szarego/niebieskiego z szablonu Worda ---
-                run.font.color.rgb = RGBColor(0x00, 0x00, 0x00)
+            
+            # Część 1: Nazwa maszyny (powiększona do 26pt i podkreślona)
+            run_machine = h.add_run(machine_name)
+            run_machine.font.size = Pt(26)
+            run_machine.bold = True
+            run_machine.underline = True
+            run_machine.font.color.rgb = RGBColor(0, 0, 0)
+            
+            # Część 2: Reszta tekstu (zmiana i data - standardowe 20pt, bez podkreślenia)
+            rest_text = ""
+            if shift_info:
+                rest_text += f" - {shift_info}"
+            if snap_date:
+                rest_text += f"                {snap_date}"
+                
+            if rest_text:
+                run_rest = h.add_run(rest_text)
+                run_rest.font.size = Pt(20)
+                run_rest.bold = True
+                run_rest.underline = False
+                run_rest.font.color.rgb = RGBColor(0, 0, 0)
 
         draw_main_header(doc)
+        # ------------------------------------------------
         
         data_dict = report_data.get("data", report_data)
         
@@ -279,15 +297,25 @@ class ReportEngine:
             full_article = str(item['geometry'])
             base_geometry = full_article.split('-')[0]
 
+            # Kiedy pojawia się nowa geometria, rysujemy nagłówek
             if base_geometry != current_base_geometry:
                 current_base_geometry = base_geometry
                 
-                # ZMIANA: Sklejamy string bazy geometrii z tytułem strony w jednym nagłówku
-                heading_text = base_geometry
+                h2 = doc.add_heading('', level=2) 
+                
+                # Część 1: Baza geometrii (powiększona do 16pt i podkreślona)
+                run_geom = h2.add_run(base_geometry)
+                run_geom.font.size = Pt(16)
+                run_geom.bold = True
+                run_geom.underline = True
+                run_geom.font.color.rgb = RGBColor(0, 0, 0)
+                
+                # Część 2: Tytuł strony (np. " - WEWNĘTRZNA" bez podkreślenia)
                 if side_title:
-                    heading_text += f" - {side_title}"
-                    
-                doc.add_heading(heading_text, level=2)
+                    run_side = h2.add_run(f" - {side_title}")
+                    run_side.bold = True
+                    run_side.underline = False
+                    run_side.font.color.rgb = RGBColor(0, 0, 0)
                 
                 table = doc.add_table(rows=0, cols=4)
                 table.style = 'Table Grid'
