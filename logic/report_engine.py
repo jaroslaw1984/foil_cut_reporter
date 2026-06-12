@@ -95,7 +95,6 @@ class ReportEngine:
         snap_date = report_data.get("snapshot_date", "")
         shift_info = report_data.get("shift_info", "")
         
-        # --- Usunięcie za pomocą REGEX z nagłówka '(zmiana 3)' na '(3)' ---
         if shift_info:
             shift_info = re.sub(r'\(zmiana\s+(\d+)\)', r'(\1)', shift_info)
         
@@ -105,20 +104,17 @@ class ReportEngine:
         if snap_date:
             header_text += f"                {snap_date}"
              
-        # --- ZMIENIONY FRAGMENT DLA GŁÓWNEGO NAGŁÓWKA ---
         def draw_main_header(document):
-            h = document.add_heading('', 0) # Tworzymy pusty nagłówek
+            h = document.add_heading('', 0)
             h.alignment = WD_ALIGN_PARAGRAPH.CENTER
             h.paragraph_format.space_after = Pt(0) 
             
-            # Część 1: Nazwa maszyny (powiększona do 26pt i podkreślona)
             run_machine = h.add_run(machine_name)
             run_machine.font.size = Pt(26)
             run_machine.bold = True
             run_machine.underline = True
             run_machine.font.color.rgb = RGBColor(0, 0, 0)
             
-            # Część 2: Reszta tekstu (zmiana i data - standardowe 20pt, bez podkreślenia)
             rest_text = ""
             if shift_info:
                 rest_text += f" - {shift_info}"
@@ -133,7 +129,6 @@ class ReportEngine:
                 run_rest.font.color.rgb = RGBColor(0, 0, 0)
 
         draw_main_header(doc)
-        # ------------------------------------------------
         
         data_dict = report_data.get("data", report_data)
         
@@ -227,46 +222,69 @@ class ReportEngine:
             
             doc.add_heading(f'{next_num}. Folia dekoracyjna (SUMA ZBIORCZA)', level=1)
             
-            decor_table = doc.add_table(rows=0, cols=6)
-            decor_table.style = 'Table Grid'
-            
-            decor_widths = (Cm(2.5), Cm(2.5), Cm(5.0), Cm(2.5), Cm(2.5), Cm(5.0))
-
-            def style_decor_row(row):
-                for i, cell in enumerate(row.cells):
-                    cell.width = decor_widths[i]
-                    for p in cell.paragraphs:
-                        p.paragraph_format.space_before = Pt(5)
-                        p.paragraph_format.space_after = Pt(5)
-
             keys = sorted(
                 decor_summary.keys(), 
                 key=lambda k: (self._extract_width_and_type(k)[1], self._extract_width_and_type(k)[0])
             )
             
-            for i in range(0, len(keys), 2):
-                row = decor_table.add_row()
-
-                left_key = keys[i]
-                run_l = row.cells[0].paragraphs[0].add_run(left_key)
-                run_l.bold = True
+            # --- ZMIANA: Sztywne wypełnianie lewo -> dół -> prawo ---
+            MAX_ROWS_PER_PAGE = 27 # Sztywny limit wierszy na stronę
+            CHUNK_SIZE = MAX_ROWS_PER_PAGE * 2 # Maksymalnie 60 folii na jednej kartce
+            
+            for chunk_start in range(0, len(keys), CHUNK_SIZE):
+                if chunk_start > 0:
+                    doc.add_page_break()
+                    draw_main_header(doc)
+                    spacer = doc.add_paragraph()
+                    spacer.paragraph_format.space_before = Pt(5) 
+                    spacer.paragraph_format.space_after = Pt(5)
                 
-                val_str_l = f"{decor_summary[left_key]:.1f}".replace('.', ',')
-                run_lm = row.cells[1].paragraphs[0].add_run(val_str_l)
-                run_lm.bold = True
-                row.cells[2].text = ''
+                chunk_keys = keys[chunk_start : chunk_start + CHUNK_SIZE]
+                
+                # Obliczamy ile faktycznie wierszy trzeba narysować (max 30)
+                num_rows = min(MAX_ROWS_PER_PAGE, len(chunk_keys))
+                
+                decor_table = doc.add_table(rows=0, cols=6)
+                decor_table.style = 'Table Grid'
+                
+                decor_widths = (Cm(2.5), Cm(2.5), Cm(5.0), Cm(2.5), Cm(2.5), Cm(5.0))
 
-                if i + 1 < len(keys):
-                    right_key = keys[i + 1]
-                    run_r = row.cells[3].paragraphs[0].add_run(right_key)
-                    run_r.bold = True
-                    
-                    val_str_r = f"{decor_summary[right_key]:.1f}".replace('.', ',')
-                    run_rm = row.cells[4].paragraphs[0].add_run(val_str_r)
-                    run_rm.bold = True
+                def style_decor_row(row):
+                    for i, cell in enumerate(row.cells):
+                        cell.width = decor_widths[i]
+                        for p in cell.paragraphs:
+                            p.paragraph_format.space_before = Pt(5)
+                            p.paragraph_format.space_after = Pt(5)
+
+                # Rysujemy tabelę z góry na dół
+                for i in range(num_rows):
+                    row = decor_table.add_row()
+
+                    # Zawsze wypełniamy najpierw lewą stronę
+                    left_idx = i
+                    if left_idx < len(chunk_keys):
+                        left_key = chunk_keys[left_idx]
+                        run_l = row.cells[0].paragraphs[0].add_run(left_key)
+                        run_l.bold = True
+                        
+                        val_str_l = f"{decor_summary[left_key]:.1f}".replace('.', ',')
+                        run_lm = row.cells[1].paragraphs[0].add_run(val_str_l)
+                        run_lm.bold = True
+                    row.cells[2].text = ''
+
+                    # Jeśli lewa (0-29) jest pełna, program zaczyna uzupełniać prawą (30-59)
+                    right_idx = i + MAX_ROWS_PER_PAGE
+                    if right_idx < len(chunk_keys):
+                        right_key = chunk_keys[right_idx]
+                        run_r = row.cells[3].paragraphs[0].add_run(right_key)
+                        run_r.bold = True
+                        
+                        val_str_r = f"{decor_summary[right_key]:.1f}".replace('.', ',')
+                        run_rm = row.cells[4].paragraphs[0].add_run(val_str_r)
+                        run_rm.bold = True
                     row.cells[5].text = ''
 
-                style_decor_row(row)
+                    style_decor_row(row)
 
         try:
             doc.save(output_path)
