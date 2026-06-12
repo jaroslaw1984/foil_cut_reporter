@@ -177,10 +177,27 @@ class ReportEngine:
             
             doc.add_heading(f'{next_num}. Folia ochronna (SUMA ZBIORCZA)', level=1)
             
-            prot_table = doc.add_table(rows=0, cols=3)
+            # Agregujemy dane z powrotem do sumy globalnej, ale zbieramy przypisane geometrie
+            aggregated_prot = {}
+            is_nested = any(isinstance(v, dict) for v in protective.values())
+
+            if is_nested:
+                for base_geom, foils in protective.items():
+                    for symbol, meters in foils.items():
+                        if symbol not in aggregated_prot:
+                            aggregated_prot[symbol] = {'meters': 0.0, 'geometries': set()}
+                        aggregated_prot[symbol]['meters'] += meters
+                        aggregated_prot[symbol]['geometries'].add(str(base_geom))
+            else:
+                for symbol, meters in protective.items():
+                    aggregated_prot[symbol] = {'meters': meters, 'geometries': set()}
+
+            # Tworzymy tabelę z 4 kolumnami: Indeks | Długość | Geometrie | Uwagi
+            prot_table = doc.add_table(rows=0, cols=4)
             prot_table.style = 'Table Grid'
             
-            prot_widths = (Cm(3.0), Cm(3.5), Cm(10.5)) 
+            # Poszerzamy tabelę o kolumnę na wpisanie numerów geometrii (Razem 17 cm)
+            prot_widths = (Cm(3.0), Cm(2.5), Cm(6.5), Cm(5.0)) 
             def style_prot_row(row):
                 for i, cell in enumerate(row.cells):
                     cell.width = prot_widths[i]
@@ -188,18 +205,26 @@ class ReportEngine:
                         p.paragraph_format.space_before = Pt(5)
                         p.paragraph_format.space_after = Pt(5)
 
-            for symbol in sorted(protective.keys()):
-                meters_sum = protective[symbol]
+            for symbol in sorted(aggregated_prot.keys()):
+                data = aggregated_prot[symbol]
                 row = prot_table.add_row()
                 
+                # 1. Indeks folii
                 run_sym = row.cells[0].paragraphs[0].add_run(symbol)
                 run_sym.bold = True
                 
-                val_str = f"{meters_sum:.1f}".replace('.', ',')
+                # 2. Suma metrów (operatorzy nie muszą już liczyć!)
+                val_str = f"{data['meters']:.1f}".replace('.', ',')
                 run_m = row.cells[1].paragraphs[0].add_run(val_str)
                 run_m.bold = True
                 
-                row.cells[2].text = '' 
+                # 3. Lista geometrii (operatorzy wiedzą, na który wózek to idzie)
+                geom_str = ", ".join(sorted(data['geometries']))
+                row.cells[2].text = geom_str
+                
+                # 4. Puste miejsce na uwagi
+                row.cells[3].text = '' 
+                
                 style_prot_row(row)
                 
             next_num += 1
