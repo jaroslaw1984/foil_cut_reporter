@@ -28,7 +28,7 @@ class FoilApp(ctk.CTk):
         # Flaga, by nie spamować okienkiem aktualizacji przy każdym odświeżeniu danych
         self.update_notified = False
         # Odpalamy pętlę sprawdzającą aktualizacje w osobnym wątku, by nie blokować GUI
-        self.auto_update_check()  
+        self.after(2000, self.auto_update_check)  
         
         # Przy starcie aplikacji czyścimy folder historii, usuwając pliki starsze niż 10 dni
         self.cleanup_history_folder()
