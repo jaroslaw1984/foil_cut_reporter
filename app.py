@@ -2,6 +2,7 @@ import customtkinter as ctk
 import os
 import json
 import time
+from config.paths import LATEST_JSON_PATH
 from datetime import datetime
 from pathlib import Path
 from gui.components.machine_card import MachineCard
@@ -23,6 +24,11 @@ class FoilApp(ctk.CTk):
         # Słownik do przechowywania referencji do kart maszynowych 
         self.active_cards = {}
         self.no_orders_label = None
+        
+        # Flaga, by nie spamować okienkiem aktualizacji przy każdym odświeżeniu danych
+        self.update_notified = False
+        # Odpalamy pętlę sprawdzającą aktualizacje w osobnym wątku, by nie blokować GUI
+        self.auto_update_check()  
         
         # Przy starcie aplikacji czyścimy folder historii, usuwając pliki starsze niż 10 dni
         self.cleanup_history_folder()
@@ -237,6 +243,47 @@ class FoilApp(ctk.CTk):
         
     def popup_about(self):
         AboutPopup(self)
+        
+    def _version_tuple(self, v: str) -> tuple[int, ...]:
+        """Funkcja pomocnicza do porównywania wersji."""
+        try:
+            return tuple(int(x) for x in str(v).strip().split("."))
+        except Exception:
+            return (0,)
+
+    def auto_update_check(self):
+        """Pętla co 15 minut sprawdzająca aktualizacje w tle."""
+        if not self.update_notified:
+            # Odpalamy sprawdzenie w osobnym wątku, żeby nie zablokować GUI
+            import threading
+            threading.Thread(target=self._background_update_task, daemon=True).start()
+        
+        # Ponów za 15 minut (900 000 ms)
+        self.after(900000, self.auto_update_check)
+
+    def _background_update_task(self):
+        """Funkcja pracująca w tle. Otwiera JSONa z sieci i sprawdza wersję."""
+        try:
+            p = Path(LATEST_JSON_PATH)
+            if not p.exists():
+                return
+                
+            with open(p, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                
+            server_version = str(data.get("version", "")).strip()
+            if server_version:
+                if self._version_tuple(server_version) > self._version_tuple(PROGRAM_VERSION):
+                    # Znaleziono nowszą wersję! Zlecamy głównemu wątkowi GUI wyświetlenie okna
+                    self.after(0, lambda: self._show_update_popup(server_version))
+        except Exception as e:
+            print(f"[Auto-Update] Błąd sprawdzania wersji w tle: {e}")
+
+    def _show_update_popup(self, new_version):
+        """Wyświetla główne okno O Programie z gotowym przyciskiem."""
+        if not self.update_notified:
+            self.update_notified = True  # Blokujemy kolejne wyskakiwanie
+            AboutPopup(self, discovered_version=new_version)
         
 if __name__ == "__main__":
     print("[DEBUG] 1. Uruchamianie skryptu...")
