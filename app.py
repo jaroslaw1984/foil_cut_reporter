@@ -18,7 +18,11 @@ class FoilApp(ctk.CTk):
         self.db = self.db_manager  
         
         # Zbiór do śledzenia wydrukowanych maszyn
-        self.printed_files = set()  
+        self.printed_files = set()
+        
+        # Słownik do przechowywania referencji do kart maszynowych 
+        self.active_cards = {}
+        self.no_orders_label = None
         
         # Przy starcie aplikacji czyścimy folder historii, usuwając pliki starsze niż 10 dni
         self.cleanup_history_folder()
@@ -54,48 +58,68 @@ class FoilApp(ctk.CTk):
         active_machines = self.db_manager.fetch_active_machines()
         print(f"[DEBUG] 3. Sukces! Pobrane maszyny z bazy: {active_machines}")
         
-        for widget in self.scrollable_frame.winfo_children():
-            widget.destroy()
-
-        # --- ZMIANA: Pobieramy wszystkie pliki JSON z folderu raportów ---
         json_files = list(Path(FOIL_REPORTS_PATH).glob("*.json"))
+        # Tworzymy zbiór ścieżek jako stringi dla łatwego i szybkiego porównywania
+        current_json_paths = {str(p) for p in json_files}
 
-        # POPRAWKA: Upraszczamy warunek. Jeśli nie ma plików JSON gotowych do druku, to znaczy że nie ma zleceń.
-        if not json_files:
-            self.no_orders_label = ctk.CTkLabel(
-                self.scrollable_frame, 
-                text="BRAK NOWYCH ZLECEŃ\nRAPORT POJAWI SIĘ AUTOMATYCZNIE", 
-                font=("Arial", 20, "bold"),
-                text_color="gray"
-            )
-            self.no_orders_label.pack(pady=100)
+        # --- FAZA 1: Zarządzanie etykietą "BRAK ZLECEŃ" ---
+        if not current_json_paths:
+            # Jeśli etykiety jeszcze nie ma na ekranie - tworzymy ją
+            if self.no_orders_label is None:
+                self.no_orders_label = ctk.CTkLabel(
+                    self.scrollable_frame, 
+                    text="BRAK NOWYCH ZLECEŃ\nRAPORT POJAWI SIĘ AUTOMATYCZNIE", 
+                    font=("Arial", 20, "bold"),
+                    text_color="gray"
+                )
+                self.no_orders_label.pack(pady=100)
+            
+            # Bezpiecznik: jeśli zniknęły pliki, upewniamy się, że niszczymy ewentualne resztki kart
+            for path, card in list(self.active_cards.items()):
+                card.destroy()
+            self.active_cards.clear()
             return
+        else:
+            # Jeśli pojawiły się pliki, a na ekranie wisi etykieta - usuwamy ją
+            if self.no_orders_label is not None:
+                self.no_orders_label.destroy()
+                self.no_orders_label = None
 
-        # 2. Budujemy karty na podstawie fizycznych plików JSON
+        # --- FAZA 2: SMART DIFFING - Usuwanie (Karta jest na ekranie, ale plik zniknął z dysku) ---
+        for path in list(self.active_cards.keys()):
+            if path not in current_json_paths:
+                self.active_cards[path].destroy()  # Usuwamy tylko ten konkretny widget!
+                del self.active_cards[path]        # Wyrzucamy go z pamięci słownika
+
+        # --- FAZA 3: SMART DIFFING - Dodawanie (Plik jest na dysku, ale nie ma go na ekranie) ---
         for json_path in json_files:
-            try:
-                with open(json_path, "r", encoding="utf-8") as f:
-                    payload = json.load(f)
-                machine_name = payload.get("machine", "Nieznana Maszyna")
-            except Exception:
-                # W razie błędu odczytu, bierzemy nazwę ze splitu nazwy pliku
-                machine_name = json_path.stem.split("_")[0]
+            path_str = str(json_path)
+            
+            # Sprawdzamy, czy musimy zbudować nową kartę (czy ścieżki nie ma w naszym słowniku)
+            if path_str not in self.active_cards:
+                try:
+                    with open(json_path, "r", encoding="utf-8") as f:
+                        payload = json.load(f)
+                    machine_name = payload.get("machine", "Nieznana Maszyna")
+                except Exception:
+                    machine_name = json_path.stem.split("_")[0]
 
-            card = MachineCard(
-                self.scrollable_frame, 
-                machine_name=machine_name
-            )
-            
-            # --- ZMIANA: Przekazujemy konkretną ścieżkę (jp) pliku do funkcji ---
-            card.btn_print.configure(command=lambda n=machine_name, c=card, jp=json_path: self.print_machine_report(n, c, jp))
-            card.btn_delete.configure(command=lambda n=machine_name, jp=json_path: self.delete_machine_report(n, jp))
-            
-            card.pack(fill="x", pady=5, padx=5)
-            card.update_status(has_data=True)
-            
-            # Oznaczamy jako wydrukowane na podstawie ścieżki pliku
-            if str(json_path) in self.printed_files:
-                card.mark_as_printed()
+                card = MachineCard(
+                    self.scrollable_frame, 
+                    machine_name=machine_name
+                )
+                
+                card.btn_print.configure(command=lambda n=machine_name, c=card, jp=json_path: self.print_machine_report(n, c, jp))
+                card.btn_delete.configure(command=lambda n=machine_name, jp=json_path: self.delete_machine_report(n, jp))
+                
+                card.pack(fill="x", pady=5, padx=5)
+                card.update_status(has_data=True)
+                
+                if path_str in self.printed_files:
+                    card.mark_as_printed()
+                    
+                # Rejestrujemy nową kartę w słowniku, by przy kolejnym odświeżaniu już jej nie rysować!
+                self.active_cards[path_str] = card
 
     def print_machine_report(self, machine_name, card, json_path):
         print(f"--- Uruchamiam generowanie raportu dla pliku: {json_path.name} ---")
