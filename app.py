@@ -2,6 +2,7 @@ import customtkinter as ctk
 import os
 import json
 import time
+import threading
 from config.paths import LATEST_JSON_PATH
 from datetime import datetime
 from pathlib import Path
@@ -255,7 +256,6 @@ class FoilApp(ctk.CTk):
         """Pętla co 15 minut sprawdzająca aktualizacje w tle."""
         if not self.update_notified:
             # Odpalamy sprawdzenie w osobnym wątku, żeby nie zablokować GUI
-            import threading
             threading.Thread(target=self._background_update_task, daemon=True).start()
         
         # Ponów za 15 minut (900 000 ms)
