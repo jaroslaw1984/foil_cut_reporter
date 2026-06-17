@@ -90,13 +90,13 @@ class ReportEngine:
         section.top_margin = Cm(0.5)
         section.bottom_margin = Cm(1.0)
         
-        self._add_page_numbering(doc)
-        
         snap_date = report_data.get("snapshot_date", "")
         shift_info = report_data.get("shift_info", "")
         
         if shift_info:
             shift_info = re.sub(r'\(zmiana\s+(\d+)\)', r'(\1)', shift_info)
+            
+        self._add_page_numbering(doc, machine_name, shift_info)
         
         header_text = f"{machine_name}"
         if shift_info:
@@ -381,16 +381,23 @@ class ReportEngine:
                 style_row(row)
 
     # --- POMOCNICZA METODA DO DODAWANIA NUMERACJI STRON W STOPCE ---
-    def _add_page_numbering(self, doc):
-        """Dodaje numerację stron 'Strona X z Y' w stopce dokumentu."""
+    def _add_page_numbering(self, doc, machine_name, shift_info):
+        """Dodaje numerację stron w stopce dokumentu z informacją o maszynie."""
         footer = doc.sections[0].footer
         p = footer.paragraphs[0]
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
         
+        # --- budujemy dynamiczne pole numeracji stron (Strona X z Y) ---
         run = p.add_run("Strona ")
         self._append_page_number_field(run, "PAGE")
         run = p.add_run(" z ")
         self._append_page_number_field(run, "NUMPAGES")
+        
+        # --- dodajemy informację o maszynie i zmianie po numerze strony ---        
+        footer_text = "  |  " + f"{machine_name}"
+        if shift_info:
+            footer_text += f" - {shift_info}"
+        p.add_run(footer_text)
 
     # --- POMOCNICZA METODA DO DODAWANIA DYNAMICZNYCH PÓL NUMERACJI STRON ---
     def _append_page_number_field(self, run, field_name):
