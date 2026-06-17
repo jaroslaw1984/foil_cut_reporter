@@ -1,6 +1,7 @@
 import pandas as pd
 import os
 import re
+import json
 from docx import Document
 from docx.shared import RGBColor, Cm, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -10,6 +11,14 @@ from docx.oxml.ns import qn
 class ReportEngine:
     def __init__(self, db_manager):
         self.db = db_manager
+        self.custom_foils = {}
+        
+        # Wczytanie słownika z niestandardowymi foliami JSON
+        try:
+            with open('config/paper_foils.json', 'r', encoding='utf-8') as f:
+                self.custom_foils = json.load(f)
+        except Exception as e:
+            print(f"Brak lub błąd pliku paper_foils.json: {e}")
 
     # --- POMOCNICZA METODA DO WSKAZANIA ODPowiedniego STEROWNIKA ODBC ---
     def load_excel_data(self, file_path: str) -> pd.DataFrame:
@@ -53,11 +62,15 @@ class ReportEngine:
         
         # Pobieramy szerszy zakres, aby uwzględnić różne typy folii ochronnych (POSNR 0050, 0060)
         sql = f"""
-            SELECT MATNR, KOLOR, IDNRK, POSNR
-            FROM HANA_INDEKS_BOM_LINIA
-            WHERE MATNR IN ('{matnr_str}')
-              AND (IDNRK LIKE 'F%' OR POSNR IN ('0050', '0060'))
-            ORDER BY MATNR, POSNR
+        SELECT MATNR, KOLOR, IDNRK, POSNR
+        FROM tblHANAIndeksBomLinia
+        WHERE MATNR IN ('{matnr_str}')
+          AND (
+              IDNRK LIKE 'F%' 
+              OR POSNR IN ('0050', '0060', '0090')
+              OR (POSNR IN ('0020', '0030', '0070') AND IDNRK LIKE '0000%')
+          )
+        ORDER BY MATNR, POSNR
         """
         
         try:
@@ -70,10 +83,17 @@ class ReportEngine:
 
     # --- POMOCNICZA METODA DO SPRAWDZENIA, CZY MASZYNA JEST OBUSTRONNA ---
     def _extract_width_and_type(self, idnrk: str):
-        """Dynamicznie wyciąga typ i szerokość z IDNRK."""
+        """Dynamicznie wyciąga typ i szerokość z IDNRK. Folie numeryczne zrzuca na koniec."""
         idnrk = str(idnrk).strip()
-        parts = idnrk.split('.')
         
+        # Odcięcie wiodących zer
+        clean_id = idnrk.lstrip('0')
+        
+        # Jeśli po odcięciu zer zostały same cyfry (nasza niestandardowa folia)
+        if clean_id.isdigit():
+            return 'Z_SPECIAL', 9999 
+            
+        parts = idnrk.split('.')
         foil_prefix = parts[0]
         try:
             width = int(parts[-1])
@@ -295,7 +315,10 @@ class ReportEngine:
                         val_str_l = f"{decor_summary[left_key]:.1f}".replace('.', ',')
                         run_lm = row.cells[1].paragraphs[0].add_run(val_str_l)
                         run_lm.bold = True
-                    row.cells[2].text = ''
+                        
+                        # Pobranie opisu dla lewej kolumny
+                        clean_left = left_key.lstrip('0')
+                        row.cells[2].text = self.custom_foils.get(clean_left, '')
 
                     # Jeśli lewa (0-29) jest pełna, program zaczyna uzupełniać prawą (30-59)
                     right_idx = i + MAX_ROWS_PER_PAGE
@@ -307,7 +330,10 @@ class ReportEngine:
                         val_str_r = f"{decor_summary[right_key]:.1f}".replace('.', ',')
                         run_rm = row.cells[4].paragraphs[0].add_run(val_str_r)
                         run_rm.bold = True
-                    row.cells[5].text = ''
+                        
+                        # Pobranie opisu dla prawej kolumny
+                        clean_right = right_key.lstrip('0')
+                        row.cells[5].text = self.custom_foils.get(clean_right, '')
 
                     style_decor_row(row)
 
@@ -340,20 +366,17 @@ class ReportEngine:
             full_article = str(item['geometry'])
             base_geometry = full_article.split('-')[0]
 
-            # Kiedy pojawia się nowa geometria, rysujemy nagłówek
             if base_geometry != current_base_geometry:
                 current_base_geometry = base_geometry
                 
                 h2 = doc.add_heading('', level=2) 
                 
-                # Część 1: Baza geometrii (powiększona do 16pt i podkreślona)
                 run_geom = h2.add_run(base_geometry)
                 run_geom.font.size = Pt(16)
                 run_geom.bold = True
                 run_geom.underline = True
                 run_geom.font.color.rgb = RGBColor(0, 0, 0)
                 
-                # Część 2: Tytuł strony (np. " - WEWNĘTRZNA" bez podkreślenia)
                 if side_title:
                     run_side = h2.add_run(f" - {side_title}")
                     run_side.bold = True
@@ -376,7 +399,9 @@ class ReportEngine:
                 run_m = row_cells[2].paragraphs[0].add_run(val_str)
                 run_m.bold = True
                 
-                row_cells[3].text = ''
+                # Odcinamy zera i szukamy nazwy folii w słowniku JSON
+                clean_id = str(item['idnrk']).lstrip('0')
+                row_cells[3].text = self.custom_foils.get(clean_id, '')
                 
                 style_row(row)
 
