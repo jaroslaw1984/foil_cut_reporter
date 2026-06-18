@@ -7,6 +7,7 @@ from docx.shared import RGBColor, Cm, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
+from config.paths import PAPER_FOILS
 
 class ReportEngine:
     def __init__(self, db_manager):
@@ -15,8 +16,10 @@ class ReportEngine:
         
         # Wczytanie słownika z niestandardowymi foliami JSON
         try:
-            with open('config/paper_foils.json', 'r', encoding='utf-8') as f:
-                self.custom_foils = json.load(f)
+            with open(PAPER_FOILS, 'r', encoding='utf-8') as f:
+                raw_foils = json.load(f)
+                # Zabezpieczenie: odcinamy ewentualne zera i spacje z kluczy w samym JSON-ie
+                self.custom_foils = {str(k).strip().lstrip('0'): v for k, v in raw_foils.items()}
         except Exception as e:
             print(f"Brak lub błąd pliku paper_foils.json: {e}")
 
@@ -302,6 +305,7 @@ class ReportEngine:
                             p.paragraph_format.space_after = Pt(5)
 
                 # Rysujemy tabelę z góry na dół
+                # Rysujemy tabelę z góry na dół
                 for i in range(num_rows):
                     row = decor_table.add_row()
 
@@ -309,31 +313,39 @@ class ReportEngine:
                     left_idx = i
                     if left_idx < len(chunk_keys):
                         left_key = chunk_keys[left_idx]
-                        run_l = row.cells[0].paragraphs[0].add_run(left_key)
+                        
+                        # --- USUNIĘCIE ZER ---
+                        raw_left = left_key.strip()
+                        display_left = raw_left.lstrip('0') if raw_left.startswith('0') else raw_left
+                        
+                        run_l = row.cells[0].paragraphs[0].add_run(display_left)
                         run_l.bold = True
                         
                         val_str_l = f"{decor_summary[left_key]:.1f}".replace('.', ',')
                         run_lm = row.cells[1].paragraphs[0].add_run(val_str_l)
                         run_lm.bold = True
                         
-                        # Pobranie opisu dla lewej kolumny
-                        clean_left = left_key.lstrip('0')
-                        row.cells[2].text = self.custom_foils.get(clean_left, '')
+                        # Wstawienie opisu (klucz też ma usunięte zera)
+                        row.cells[2].text = self.custom_foils.get(display_left, '')
 
                     # Jeśli lewa (0-29) jest pełna, program zaczyna uzupełniać prawą (30-59)
                     right_idx = i + MAX_ROWS_PER_PAGE
                     if right_idx < len(chunk_keys):
                         right_key = chunk_keys[right_idx]
-                        run_r = row.cells[3].paragraphs[0].add_run(right_key)
+                        
+                        # --- USUNIĘCIE ZER ---
+                        raw_right = right_key.strip()
+                        display_right = raw_right.lstrip('0') if raw_right.startswith('0') else raw_right
+                        
+                        run_r = row.cells[3].paragraphs[0].add_run(display_right)
                         run_r.bold = True
                         
                         val_str_r = f"{decor_summary[right_key]:.1f}".replace('.', ',')
                         run_rm = row.cells[4].paragraphs[0].add_run(val_str_r)
                         run_rm.bold = True
                         
-                        # Pobranie opisu dla prawej kolumny
-                        clean_right = right_key.lstrip('0')
-                        row.cells[5].text = self.custom_foils.get(clean_right, '')
+                        # Wstawienie opisu
+                        row.cells[5].text = self.custom_foils.get(display_right, '')
 
                     style_decor_row(row)
 
@@ -392,16 +404,19 @@ class ReportEngine:
                 row_cells = row.cells
                 row_cells[0].text = full_article      
                 
-                run_idx = row_cells[1].paragraphs[0].add_run(str(item['idnrk']))
+                # --- USUNIĘCIE ZER TYLKO DLA FOLII NUMERYCZNYCH ---
+                raw_id = str(item['idnrk']).strip()
+                display_id = raw_id.lstrip('0') if raw_id.startswith('0') else raw_id
+                
+                run_idx = row_cells[1].paragraphs[0].add_run(display_id)
                 run_idx.bold = True
                 
                 val_str = f"{item['meters']:.1f}".replace('.', ',')
                 run_m = row_cells[2].paragraphs[0].add_run(val_str)
                 run_m.bold = True
                 
-                # Odcinamy zera i szukamy nazwy folii w słowniku JSON
-                clean_id = str(item['idnrk']).lstrip('0')
-                row_cells[3].text = self.custom_foils.get(clean_id, '')
+                # Szukamy nazwy folii w słowniku
+                row_cells[3].text = self.custom_foils.get(display_id, '')
                 
                 style_row(row)
 
