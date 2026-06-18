@@ -18,3 +18,6 @@ LATEST_JSON_PATH = r"\\na02\groups\3.PROJEKTY\Production Counter Program\FoilRep
 
 # --- ścieżka do folderu z historią raportów ---
 HISTORY_PATH = r"\\na02\groups\3.PROJEKTY\Production Counter Program\FoilReports\history"
+
+# --- ścieżka z informacjami o niestandardowych foliowych papierach ---
+PAPER_FOILS = BASE_DIR / "config" / "paper_foils.json"
