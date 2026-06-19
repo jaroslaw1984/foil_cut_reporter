@@ -4,7 +4,7 @@ import hashlib
 import threading
 import sys
 import json
-from paths import BUILD_PATH, LATEST_JSON_PATH
+from deploy.paths import BUILD_PATH, LATEST_JSON_PATH
 from pathlib import Path
 
 class ReleaseBuilder:
