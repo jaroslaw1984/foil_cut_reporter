@@ -3,13 +3,12 @@ import os
 import json
 import time
 import threading
-from config.paths import LATEST_JSON_PATH
 from datetime import datetime
 from pathlib import Path
 from gui.components.machine_card import MachineCard
 from database.db_manager import DBManager
 from logic.report_engine import ReportEngine
-from config.paths import FOIL_REPORTS_PATH, HISTORY_PATH
+from config.paths import FOIL_REPORTS_PATH, HISTORY_PATH, LATEST_JSON_PATH
 from config.version import PROGRAM_NAME, PROGRAM_VERSION
 from gui.components.popup_about import AboutPopup
 
