@@ -23,8 +23,6 @@ class ReleaseBuilder:
         # Miejsce na tymczasowego ZIPa (zapiszemy go obok głównego folderu dist)
         self.zip_temp_path = self.base_dir / "dist" / f"FoilCutReporter_{self.version}"
 
-        # TODO: Ścieżki sieciowe dodamy w kolejnym kroku
-
     def start(self):
         """Uruchamia cały proces w tle, by nie zamrozić okna programu."""
         thread = threading.Thread(target=self._run_pipeline, daemon=True)
