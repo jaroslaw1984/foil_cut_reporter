@@ -1,6 +1,6 @@
 # Foil Cut Reporter
 
-A manufacturing support application designed for real-time monitoring and reporting of lamination foil cutting processes, alongside profile geometry and Bill of Materials (BOM) management. The program operates continuously, providing production planners with dynamic updates.
+A production support application designed to generate reports on logistics processes related to the cutting of laminating film. 
 
 ## 📷 Screenshots
 
@@ -8,13 +8,13 @@ A manufacturing support application designed for real-time monitoring and report
 ![Main Window](assets/main_window.png)
 
 
-### Loaded report
+### A new report has been released
 ![Print View](assets/main_window_ready_to_print.png)
 
 ## 🚀 Key Features
 
-- **Automated Data Refresh:** Continuous monitoring of production line parameters in real-time with a 30-second interval (featuring an optimized rendering mechanism to completely eliminate UI flickering).
-- **Geometry & BOM Management:** Streamlined processing of profile indices, assembly configurations, and custom foil cutting parameters.
+- **Automated Data Refresh:** Continuous monitoring of the availability of new reports for a given machine. The program checks every 30 seconds to see if a new     document has appeared on the server's hard drive.
+- **Generating a report:** The report is generated based on the data contained in the JSON file; it then combines all the data, after which the report is created as a Word file. 
 - **Auto-Update Notification System:** Built-in version checking mechanism that automatically triggers a pop-up window notifying the user whenever a newer release is deployed on the network server.
 
 ## 🛠️ Tech Stack
