@@ -1,7 +1,7 @@
 from pathlib import Path
 
 # --- podstawowa ścieżka projektu (katalog "project") ---
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parent
 
 # --- ścieżki do serwera
 SERVER = r"sipdbprod\hydms1"
@@ -20,4 +20,4 @@ LATEST_JSON_PATH = r"\\na02\groups\3.PROJEKTY\Production Counter Program\FoilRep
 HISTORY_PATH = r"\\na02\groups\3.PROJEKTY\Production Counter Program\FoilReports\history"
 
 # --- ścieżka z informacjami o niestandardowych foliach papierowych ---
-PAPER_FOILS = BASE_DIR / "config" / "paper_foils.json"
+PAPER_FOILS = BASE_DIR / "paper_foils.json"
