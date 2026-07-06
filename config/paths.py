@@ -1,6 +1,6 @@
 from pathlib import Path
 
-# --- podstawowa ścieżka projektu (katalog "project") ---
+# --- podstawowa ścieżka projektu ---
 BASE_DIR = Path(__file__).resolve().parent
 
 # --- ścieżki do serwera
