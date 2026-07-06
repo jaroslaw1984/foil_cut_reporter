@@ -67,6 +67,7 @@ class ReleaseBuilder:
             "--onedir", 
             "--clean", 
             "--name", "foil-cut-reporter",
+            "--add-data", "config\\paper_foils.json;config",
             "app.py"
         ]
         
