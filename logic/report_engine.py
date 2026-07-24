@@ -7,7 +7,7 @@ from docx.shared import RGBColor, Cm, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
-from config.paths import PAPER_FOILS
+from config.paths import PAPER_FOILS, BOM
 
 class ReportEngine:
     def __init__(self, db_manager):
@@ -66,7 +66,7 @@ class ReportEngine:
         # Pobieramy szerszy zakres, aby uwzględnić różne typy folii ochronnych (POSNR 0050, 0060)
         sql = f"""
         SELECT MATNR, KOLOR, IDNRK, POSNR
-        FROM tblHANAIndeksBomLinia
+        FROM ('{BOM}')
         WHERE MATNR IN ('{matnr_str}')
           AND (
               IDNRK LIKE 'F%' 
