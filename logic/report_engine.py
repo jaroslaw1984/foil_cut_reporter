@@ -168,7 +168,8 @@ class ReportEngine:
             side_to_title = {
                 'Zewn.': 'ZEWNĘTRZNA',
                 'Wewn.': 'WEWNĘTRZNA',
-                'Górna': 'STRONA GÓRNA'
+                'Górna': 'STRONA GÓRNA',
+                'Obustronne': 'OBUSTRONNE'
             }
             
             for item in sequence:
