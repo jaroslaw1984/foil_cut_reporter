@@ -257,8 +257,19 @@ class ReportEngine:
         decor_summary = {}
         for side in ['production_sequence', 'combined_side']:
             for item in data_dict.get(side, []):
-                idnrk = item['idnrk']
-                decor_summary[idnrk] = decor_summary.get(idnrk, 0.0) + item['meters']
+                idnrk = str(item['idnrk']).strip()
+
+                try:
+                    width = int(item.get('width', 0) or 0)
+                except (TypeError, ValueError):
+                    width = 0
+
+                # F99 zachowuje własny indeks, a szerokość z referencyjnego
+                # artykułu F55 służy wyłącznie do rozdzielenia pozycji w sumie.
+                summary_key = (idnrk, width)
+                decor_summary[summary_key] = (
+                    decor_summary.get(summary_key, 0.0) + item['meters']
+                )
                 
         if decor_summary:
             new_section = doc.add_section()
@@ -272,8 +283,11 @@ class ReportEngine:
             doc.add_heading(f'{next_num}. Folia dekoracyjna (SUMA ZBIORCZA)', level=1)
             
             keys = sorted(
-                decor_summary.keys(), 
-                key=lambda k: (self._extract_width_and_type(k)[1], self._extract_width_and_type(k)[0])
+                decor_summary.keys(),
+                key=lambda k: (
+                    k[1] or self._extract_width_and_type(k[0])[1],
+                    self._extract_width_and_type(k[0])[0],
+                )
             )
             
             # --- ZMIANA: Sztywne wypełnianie lewo -> dół -> prawo ---
@@ -314,9 +328,12 @@ class ReportEngine:
                     left_idx = i
                     if left_idx < len(chunk_keys):
                         left_key = chunk_keys[left_idx]
+                        left_idnrk, left_width = left_key
                         
                         # --- USUNIĘCIE ZER ---
-                        raw_left = left_key.strip()
+                        raw_left = self._format_decor_summary_id(
+                            left_idnrk, left_width
+                        )
                         display_left = raw_left.lstrip('0') if raw_left.startswith('0') else raw_left
                         
                         run_l = row.cells[0].paragraphs[0].add_run(display_left)
@@ -333,9 +350,12 @@ class ReportEngine:
                     right_idx = i + MAX_ROWS_PER_PAGE
                     if right_idx < len(chunk_keys):
                         right_key = chunk_keys[right_idx]
+                        right_idnrk, right_width = right_key
                         
                         # --- USUNIĘCIE ZER ---
-                        raw_right = right_key.strip()
+                        raw_right = self._format_decor_summary_id(
+                            right_idnrk, right_width
+                        )
                         display_right = raw_right.lstrip('0') if raw_right.startswith('0') else raw_right
                         
                         run_r = row.cells[3].paragraphs[0].add_run(display_right)
@@ -356,6 +376,14 @@ class ReportEngine:
         except Exception as e:
             print(f"Błąd zapisu: {e}")
             return False
+
+    @staticmethod
+    def _format_decor_summary_id(idnrk: str, width: int) -> str:
+        """Dodaje szerokość do indeksu F99 bez zamieniania go na F55."""
+        raw_id = str(idnrk).strip()
+        if raw_id.startswith('F99') and width > 0:
+            return raw_id.replace('F99', f'F99.{width:03d}', 1)
+        return raw_id
 
     # --- POMOCNICZA METODA DO WYPEŁNIANIA SEKCJI DEKORACYJNEJ ---
     def _fill_decor_section(self, doc, data_list, side_title=""):
